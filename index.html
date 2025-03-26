@@ -1,13 +1,48 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photoshop界面</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+    <div class="sidebar left-sidebar">
+        <!-- 左侧栏内容 -->
+        <ul class="tool-list">
+            <li class="tool-item">选择工具</li>
+            <li class="tool-item">画笔工具</li>
+            <li class="tool-item">橡皮擦工具</li>
+            <li class="tool-item">填充工具</li>
+            <li class="tool-item">文字工具</li>
+            <li class="tool-item">缩放工具</li>
+        </ul>
+    </div>
+    <div class="main-content">
+        <!-- 主内容区域 -->
+    </div>
+    <div class="sidebar right-sidebar">
+        <!-- 右侧栏内容 -->
+        <div class="panel">
+            <h3>图层</h3>
+            <ul class="layer-list">
+                <li class="layer-item">图层 1</li>
+                <li class="layer-item">图层 2</li>
+            </ul>
+        </div>
+        <div class="panel">
+            <h3>颜色选择器</h3>
+            <input type="color" id="color-picker">
+        </div>
+        <div class="panel">
+            <h3>历史记录</h3>
+            <ul class="history-list">
+                <li class="history-item">步骤 1</li>
+                <li class="history-item">步骤 2</li>
+            </ul>
+        </div>
+    </div>
+</div>
+</body>
 </html>
