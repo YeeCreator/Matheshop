@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type Tool = 'select' | 'brush' | 'eraser' | 'fill' | 'text' | 'zoom'
 
@@ -8,14 +8,18 @@ export type HistoryEntry = {
   at: number
 }
 
+export type CanvasHistorySource = 'user' | 'system'
+
 export type CanvasBoardProps = {
   tool: Tool
   color: string
   brushSize: number
-  onHistoryPush: (entry: HistoryEntry) => void
+  onHistoryPush: (entry: HistoryEntry, source?: CanvasHistorySource) => void
   requestUndoToken: number
   requestClearToken: number
   requestFillToken: number
+  /** true when there is something to undo (snapshots length > 1) */
+  onCanUndoChange?: (canUndo: boolean) => void
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -42,14 +46,52 @@ function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
   return false
 }
 
+function scaleImageDataToCanvas(img: ImageData, width: number, height: number) {
+  // Convert ImageData -> tmp canvas -> draw into target size -> return ImageData
+  const tmp = document.createElement('canvas')
+  tmp.width = img.width
+  tmp.height = img.height
+  const tmpCtx = tmp.getContext('2d')
+  if (!tmpCtx) return null
+  tmpCtx.putImageData(img, 0, 0)
+
+  const out = document.createElement('canvas')
+  out.width = width
+  out.height = height
+  const outCtx = out.getContext('2d')
+  if (!outCtx) return null
+
+  outCtx.save()
+  outCtx.fillStyle = '#ffffff'
+  outCtx.fillRect(0, 0, width, height)
+  outCtx.drawImage(tmp, 0, 0, width, height)
+  outCtx.restore()
+
+  try {
+    return outCtx.getImageData(0, 0, width, height)
+  } catch {
+    return null
+  }
+}
+
 export default function CanvasBoard(props: CanvasBoardProps) {
-  const { tool, color, brushSize, onHistoryPush, requestUndoToken, requestClearToken, requestFillToken } = props
+  const {
+    tool,
+    color,
+    brushSize,
+    onHistoryPush,
+    requestUndoToken,
+    requestClearToken,
+    requestFillToken,
+    onCanUndoChange,
+  } = props
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
 
   // snapshot stack for undo
   const snapshotsRef = useRef<ImageData[]>([])
+  const reportCanUndo = useCallback(() => onCanUndoChange?.(snapshotsRef.current.length > 1), [onCanUndoChange])
 
   const [isDrawing, setIsDrawing] = useState(false)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
@@ -78,40 +120,40 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.restore()
       snapshotsRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)]
-      onHistoryPush({ id: crypto.randomUUID(), label: '初始化画布', at: Date.now() })
+      reportCanUndo()
+      onHistoryPush({ id: crypto.randomUUID(), label: '初始化画布', at: Date.now() }, 'system')
     }
 
     init()
 
     const ro = new ResizeObserver(() => {
-      // keep content on resize: draw old content into resized canvas
       const didResize = resizeCanvasToDisplaySize(canvas)
       if (!didResize) return
 
-      const img = snapshotsRef.current.at(-1)
-      if (!img) return
+      // scale all snapshots to new size so undo history keeps working after resize
+      const scaled = snapshotsRef.current
+        .map((img) => scaleImageDataToCanvas(img, canvas.width, canvas.height))
+        .filter((x): x is ImageData => Boolean(x))
 
-      const tmp = document.createElement('canvas')
-      tmp.width = img.width
-      tmp.height = img.height
-      const tmpCtx = tmp.getContext('2d')
-      if (!tmpCtx) return
-      tmpCtx.putImageData(img, 0, 0)
+      if (scaled.length === 0) {
+        ctx.save()
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.restore()
+        snapshotsRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)]
+      } else {
+        snapshotsRef.current = scaled
+        const top = snapshotsRef.current.at(-1)
+        if (top) ctx.putImageData(top, 0, 0)
+      }
 
-      ctx.save()
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height)
-      ctx.restore()
-
-      // new snapshot matches new size
-      snapshotsRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)]
-      onHistoryPush({ id: crypto.randomUUID(), label: '画布缩放', at: Date.now() })
+      reportCanUndo()
+      onHistoryPush({ id: crypto.randomUUID(), label: '画布缩放', at: Date.now() }, 'system')
     })
 
     ro.observe(wrap)
     return () => ro.disconnect()
-  }, [onHistoryPush])
+  }, [onHistoryPush, reportCanUndo])
 
   const pushSnapshot = (label: string) => {
     const canvas = canvasRef.current
@@ -122,7 +164,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     try {
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
       snapshotsRef.current.push(img)
-      onHistoryPush({ id: crypto.randomUUID(), label, at: Date.now() })
+      reportCanUndo()
+      onHistoryPush({ id: crypto.randomUUID(), label, at: Date.now() }, 'user')
     } catch {
       // ignore
     }
@@ -204,34 +247,33 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    if (snapshotsRef.current.length <= 1) return
+    if (snapshotsRef.current.length <= 1) {
+      reportCanUndo()
+      return
+    }
 
     snapshotsRef.current.pop()
     const prev = snapshotsRef.current.at(-1)
-    if (!prev) return
+    if (!prev) {
+      reportCanUndo()
+      return
+    }
 
-    // If size differs (e.g. after resize), draw scaled
+    // If size differs (should be rare after resize scaling, but keep safe)
     if (prev.width !== canvas.width || prev.height !== canvas.height) {
-      const tmp = document.createElement('canvas')
-      tmp.width = prev.width
-      tmp.height = prev.height
-      const tmpCtx = tmp.getContext('2d')
-      if (!tmpCtx) return
-      tmpCtx.putImageData(prev, 0, 0)
-
-      ctx.save()
-      ctx.fillStyle = '#ffffff'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height)
-      ctx.restore()
-
-      snapshotsRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)]
+      const scaled = scaleImageDataToCanvas(prev, canvas.width, canvas.height)
+      if (scaled) {
+        ctx.putImageData(scaled, 0, 0)
+        // keep stack length, but replace the top with scaled version
+        snapshotsRef.current[snapshotsRef.current.length - 1] = scaled
+      }
     } else {
       ctx.putImageData(prev, 0, 0)
     }
 
-    onHistoryPush({ id: crypto.randomUUID(), label: '撤销', at: Date.now() })
-  }, [requestUndoToken, onHistoryPush])
+    reportCanUndo()
+    onHistoryPush({ id: crypto.randomUUID(), label: '撤销', at: Date.now() }, 'user')
+  }, [requestUndoToken, onHistoryPush, reportCanUndo])
 
   // clear request
   useEffect(() => {
@@ -242,14 +284,29 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    // push current state first so clear can be undone
+    try {
+      const before = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      snapshotsRef.current.push(before)
+    } catch {
+      // ignore
+    }
+
     ctx.save()
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
 
-    snapshotsRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)]
-    onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() })
-  }, [requestClearToken, onHistoryPush])
+    try {
+      const after = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      snapshotsRef.current.push(after)
+    } catch {
+      // ignore
+    }
+
+    reportCanUndo()
+    onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() }, 'user')
+  }, [requestClearToken, onHistoryPush, reportCanUndo])
 
   // fill request (simple full fill as placeholder)
   useEffect(() => {
@@ -260,14 +317,29 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    // push current state first so fill can be undone
+    try {
+      const before = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      snapshotsRef.current.push(before)
+    } catch {
+      // ignore
+    }
+
     ctx.save()
     ctx.fillStyle = color
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
 
-    snapshotsRef.current = [ctx.getImageData(0, 0, canvas.width, canvas.height)]
-    onHistoryPush({ id: crypto.randomUUID(), label: '填充', at: Date.now() })
-  }, [requestFillToken, color, onHistoryPush])
+    try {
+      const after = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      snapshotsRef.current.push(after)
+    } catch {
+      // ignore
+    }
+
+    reportCanUndo()
+    onHistoryPush({ id: crypto.randomUUID(), label: '填充', at: Date.now() }, 'user')
+  }, [requestFillToken, color, onHistoryPush, reportCanUndo])
 
   return (
     <div className="canvas-shell">

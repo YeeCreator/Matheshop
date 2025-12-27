@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import CanvasBoard, { type HistoryEntry, type Tool } from './components/CanvasBoard'
+import CanvasBoard, { type CanvasHistorySource, type HistoryEntry, type Tool } from './components/CanvasBoard'
 import './App.css'
 
 const TOOL_LABELS: Record<Tool, string> = {
@@ -16,6 +16,7 @@ function App() {
   const [color, setColor] = useState('#ff0000')
   const [brushSize, setBrushSize] = useState(8)
   const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [canUndo, setCanUndo] = useState(false)
 
   // simple layers placeholder
   const layers = useMemo(() => ['图层 1'], [])
@@ -25,7 +26,8 @@ function App() {
   const [clearToken, setClearToken] = useState(0)
   const [fillToken, setFillToken] = useState(0)
 
-  const pushHistory = (entry: HistoryEntry) => {
+  const pushHistory = (entry: HistoryEntry, source: CanvasHistorySource = 'user') => {
+    if (source !== 'user') return
     setHistory((prev) => [entry, ...prev].slice(0, 30))
   }
 
@@ -71,11 +73,7 @@ function App() {
           >
             橡皮擦
           </button>
-          <button
-            type="button"
-            onClick={() => setUndoToken((x) => x + 1)}
-            disabled={history.length === 0}
-          >
+          <button type="button" onClick={() => setUndoToken((x) => x + 1)} disabled={!canUndo}>
             撤销
           </button>
           <button type="button" onClick={() => setClearToken((x) => x + 1)}>
@@ -115,6 +113,7 @@ function App() {
           requestUndoToken={undoToken}
           requestClearToken={clearToken}
           requestFillToken={fillToken}
+          onCanUndoChange={setCanUndo}
         />
       </div>
 
@@ -132,26 +131,24 @@ function App() {
 
         <div className="panel">
           <h3>颜色选择器</h3>
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          />
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
         </div>
 
         <div className="panel">
           <h3>历史记录</h3>
-          <ul className="history-list">
-            {history.length === 0 ? (
-              <li className="history-item">暂无</li>
-            ) : (
-              history.map((h) => (
-                <li key={h.id} className="history-item">
-                  {h.label}
-                </li>
-              ))
-            )}
-          </ul>
+          <textarea
+            className="history-textbox"
+            readOnly
+            value={
+              history.length === 0
+                ? '暂无'
+                : history
+                    .slice()
+                    .reverse()
+                    .map((h) => h.label)
+                    .join('\n')
+            }
+          />
         </div>
       </div>
     </div>
