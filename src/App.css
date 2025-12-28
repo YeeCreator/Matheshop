@@ -24,6 +24,9 @@
   border-radius: 8px;
   overflow: hidden;
   position: relative;
+  overscroll-behavior: contain;
+  /* helps avoid scroll anchoring oddities when the page layout changes */
+  overflow-anchor: none;
 }
 
 .canvas {
@@ -31,6 +34,14 @@
   height: 100%;
   display: block;
   touch-action: none;
+  cursor: crosshair;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.canvas:active {
+  cursor: grabbing;
 }
 
 .small-muted {
