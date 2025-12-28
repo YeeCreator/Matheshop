@@ -3,35 +3,26 @@ import CanvasBoard, { type CanvasHistorySource, type HistoryEntry, type Tool } f
 import './App.css'
 
 const TOOL_LABELS: Record<Tool, string> = {
-  select: '选择工具',
-  brush: '画笔工具',
-  eraser: '橡皮擦工具',
-  fill: '填充工具',
-  text: '文字工具',
-  zoom: '缩放工具',
+  text: '文本/公式',
 }
 
 function App() {
-  const [tool, setTool] = useState<Tool>('brush')
-  const [color, setColor] = useState('#ff0000')
-  const [brushSize, setBrushSize] = useState(8)
+  const [tool, setTool] = useState<Tool>('text')
+  const [color, setColor] = useState('#111111')
   const [history, setHistory] = useState<HistoryEntry[]>([])
-  const [canUndo, setCanUndo] = useState(false)
 
   // simple layers placeholder
   const layers = useMemo(() => ['图层 1'], [])
 
   // “token” 触发 CanvasBoard 内部的 useEffect
-  const [undoToken, setUndoToken] = useState(0)
   const [clearToken, setClearToken] = useState(0)
-  const [fillToken, setFillToken] = useState(0)
 
   const pushHistory = (entry: HistoryEntry, source: CanvasHistorySource = 'user') => {
     if (source !== 'user') return
     setHistory((prev) => [entry, ...prev].slice(0, 30))
   }
 
-  const toolItems: Tool[] = ['select', 'brush', 'eraser', 'fill', 'text', 'zoom']
+  const toolItems: Tool[] = ['text']
 
   return (
     <div className="container">
@@ -57,64 +48,19 @@ function App() {
 
       <div className="main-content">
         <div className="canvas-toolbar">
-          <button
-            type="button"
-            onClick={() => {
-              setTool('brush')
-            }}
-          >
-            画笔
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTool('eraser')
-            }}
-          >
-            橡皮擦
-          </button>
-          <button type="button" onClick={() => setUndoToken((x) => x + 1)} disabled={!canUndo}>
-            撤销
-          </button>
           <button type="button" onClick={() => setClearToken((x) => x + 1)}>
             清空
           </button>
-          <button type="button" onClick={() => setFillToken((x) => x + 1)}>
-            填充
-          </button>
 
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            笔刷
-            <input
-              type="range"
-              min={1}
-              max={60}
-              value={brushSize}
-              onChange={(e) => setBrushSize(Number(e.target.value))}
-            />
-            <span style={{ minWidth: 32 }}>{brushSize}</span>
+            文本颜色
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
           </label>
 
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            颜色
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-            />
-          </label>
+          <span className="small-muted">提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</span>
         </div>
 
-        <CanvasBoard
-          tool={tool}
-          color={color}
-          brushSize={brushSize}
-          onHistoryPush={pushHistory}
-          requestUndoToken={undoToken}
-          requestClearToken={clearToken}
-          requestFillToken={fillToken}
-          onCanUndoChange={setCanUndo}
-        />
+        <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
       </div>
 
       <div className="sidebar right-sidebar">

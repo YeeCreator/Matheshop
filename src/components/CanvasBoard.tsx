@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import katex from 'katex'
 
-export type Tool = 'select' | 'brush' | 'eraser' | 'fill' | 'text' | 'zoom'
+export type Tool = 'text'
 
 export type HistoryEntry = {
   id: string
@@ -14,13 +14,8 @@ export type CanvasHistorySource = 'user' | 'system'
 export type CanvasBoardProps = {
   tool: Tool
   color: string
-  brushSize: number
   onHistoryPush: (entry: HistoryEntry, source?: CanvasHistorySource) => void
-  requestUndoToken: number
   requestClearToken: number
-  requestFillToken: number
-  /** true when there is something to undo (snapshots length > 1) */
-  onCanUndoChange?: (canUndo: boolean) => void
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -83,28 +78,22 @@ function getCanvasScreenPoint(canvas: HTMLCanvasElement, clientX: number, client
 }
 
 export default function CanvasBoard(props: CanvasBoardProps) {
-  const {
-    tool,
-    color,
-    brushSize,
-    onHistoryPush,
-    requestUndoToken,
-    requestClearToken,
-    requestFillToken,
-    onCanUndoChange,
-  } = props
+  const { tool, color, onHistoryPush, requestClearToken } = props
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
 
-  // Infinite-canvas model: store vector strokes in world coordinates.
+  // 目前先保留 strokes 的实现但不再提供 UI/入口；后续如确定完全不需要，可再删。
   const strokesRef = useRef<Stroke[]>([])
   const redoRef = useRef<Stroke[]>([])
   const backgroundRef = useRef<string>('#ffffff')
 
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
 
-  const formulasRef = useRef<FormulaItem[]>([])
+  const [formulas, setFormulas] = useState<FormulaItem[]>([])
+
+  const didInitRef = useRef(false)
+  const lastClearTokenRef = useRef<number>(0)
 
   const rafRef = useRef<number | null>(null)
   const scheduleRender = useCallback(() => {
@@ -116,13 +105,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const reportCanUndo = useCallback(() => {
-    onCanUndoChange?.(strokesRef.current.length > 0)
-  }, [onCanUndoChange])
-
-  const [isDrawing, setIsDrawing] = useState(false)
-  const activeStrokeRef = useRef<Stroke | null>(null)
-
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef<{
     pointerId: number
@@ -130,7 +112,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     startCam: Camera
   } | null>(null)
 
-  const effectiveSize = useMemo(() => clamp(brushSize, 1, 200), [brushSize])
+  const [isSpaceDown, setIsSpaceDown] = useState(false)
 
   const [editor, setEditor] = useState<
     | null
@@ -147,7 +129,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const [renderTick, setRenderTick] = useState(0)
 
   const bumpRenderTick = useCallback(() => {
-    // 让 overlay 的公式位置在缩放/平移后也能更新
     setRenderTick((x) => x + 1)
   }, [])
 
@@ -167,7 +148,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     const cam = cameraRef.current
 
-    // Draw grid in world space (optional but helps with orientation on infinite canvas)
+    // 可选网格
     const gridSize = 100
     const gridPx = gridSize * cam.zoom
     if (gridPx >= 20) {
@@ -197,45 +178,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       ctx.restore()
     }
 
-    // Draw strokes in world space using camera transform.
-    ctx.save()
-    ctx.setTransform(cam.zoom, 0, 0, cam.zoom, -cam.x * cam.zoom, -cam.y * cam.zoom)
-
-    const drawStroke = (s: Stroke) => {
-      const pts = s.points
-      if (pts.length === 0) return
-
-      ctx.save()
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.lineWidth = s.size
-
-      if (s.tool === 'eraser') {
-        // "Erase" by drawing with background color. (Later we can switch to real compositing + tiled backing store)
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.strokeStyle = backgroundRef.current
-      } else {
-        ctx.globalCompositeOperation = 'source-over'
-        ctx.strokeStyle = s.color
-      }
-
-      ctx.beginPath()
-      ctx.moveTo(pts[0].x, pts[0].y)
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
-      // If it's a single point, draw a dot
-      if (pts.length === 1) {
-        ctx.lineTo(pts[0].x + 0.001, pts[0].y + 0.001)
-      }
-      ctx.stroke()
-      ctx.restore()
-    }
-
-    for (const s of strokesRef.current) drawStroke(s)
-    if (activeStrokeRef.current) drawStroke(activeStrokeRef.current)
-
-    ctx.restore()
-
-    // 同步一次 tick，确保 DOM overlay 能拿到最新 camera
     bumpRenderTick()
   }, [bumpRenderTick])
 
@@ -245,18 +187,19 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const wrap = wrapRef.current
     if (!canvas || !wrap) return
 
-    const init = () => {
+    // React 19 + StrictMode 下，开发环境可能会重复挂载/执行 effect。
+    // 这里用 didInitRef 保证不会把用户刚插入的内容“重置掉”。
+    if (!didInitRef.current) {
+      didInitRef.current = true
       resizeCanvasToDisplaySize(canvas)
       backgroundRef.current = '#ffffff'
       strokesRef.current = []
       redoRef.current = []
+      setFormulas([])
       cameraRef.current = { x: 0, y: 0, zoom: 1 }
-      reportCanUndo()
       render()
       onHistoryPush({ id: crypto.randomUUID(), label: '初始化画布', at: Date.now() }, 'system')
     }
-
-    init()
 
     const ro = new ResizeObserver(() => {
       const didResize = resizeCanvasToDisplaySize(canvas)
@@ -270,38 +213,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       ro.disconnect()
       if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current)
     }
-  }, [onHistoryPush, render, reportCanUndo])
-
-  const startStroke = (world: { x: number; y: number }) => {
-    const next: Stroke = {
-      id: crypto.randomUUID(),
-      tool: tool === 'eraser' ? 'eraser' : 'brush',
-      color,
-      size: effectiveSize,
-      points: [world],
-    }
-    activeStrokeRef.current = next
-    redoRef.current = []
-  }
-
-  const appendStrokePoint = (world: { x: number; y: number }) => {
-    const s = activeStrokeRef.current
-    if (!s) return
-    s.points.push(world)
-  }
-
-  const commitStroke = (label: string) => {
-    const s = activeStrokeRef.current
-    if (!s) return
-    activeStrokeRef.current = null
-
-    // avoid committing empty strokes
-    if (s.points.length > 0) {
-      strokesRef.current = [...strokesRef.current, s]
-      reportCanUndo()
-      onHistoryPush({ id: crypto.randomUUID(), label, at: Date.now() }, 'user')
-    }
-  }
+  }, [onHistoryPush, render])
 
   const commitFormula = useCallback(
     (latexRaw: string, world: { x: number; y: number }) => {
@@ -317,209 +229,126 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         fontSize: 22,
       }
 
-      formulasRef.current = [...formulasRef.current, next]
+      setFormulas((prev) => [...prev, next])
       onHistoryPush({ id: crypto.randomUUID(), label: '插入公式', at: Date.now() }, 'user')
       scheduleRender()
     },
     [color, onHistoryPush, scheduleRender],
   )
 
-  const openEditorAtPointer = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current
-      const wrap = wrapRef.current
-      if (!canvas || !wrap) return
+  const openEditorAtPointer = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current
+    const wrap = wrapRef.current
+    if (!canvas || !wrap) return
 
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      const world = screenToWorld(screen, cameraRef.current)
+    const screen = getCanvasScreenPoint(canvas, clientX, clientY)
+    const world = screenToWorld(screen, cameraRef.current)
 
-      const rect = wrap.getBoundingClientRect()
-      const left = e.clientX - rect.left
-      const top = e.clientY - rect.top
+    const rect = wrap.getBoundingClientRect()
+    const left = clientX - rect.left
+    const top = clientY - rect.top
 
-      setEditor({ id: crypto.randomUUID(), latex: '', world, css: { left, top } })
-    },
-    [],
-  )
+    setEditor({ id: crypto.randomUUID(), latex: '', world, css: { left, top } })
+  }, [])
 
-  // 将焦点移入编辑框
   useEffect(() => {
     if (!editor) return
     const t = window.setTimeout(() => editorInputRef.current?.focus(), 0)
     return () => window.clearTimeout(t)
   }, [editor])
 
-  // undo request (remove last stroke)
-  useEffect(() => {
-    if (requestUndoToken === 0) return
-
-    if (strokesRef.current.length === 0) {
-      reportCanUndo()
-      return
-    }
-
-    const last = strokesRef.current[strokesRef.current.length - 1]
-    if (last) redoRef.current = [...redoRef.current, last]
-    strokesRef.current = strokesRef.current.slice(0, -1)
-
-    reportCanUndo()
-    render()
-    onHistoryPush({ id: crypto.randomUUID(), label: '撤销', at: Date.now() }, 'user')
-  }, [requestUndoToken, onHistoryPush, render, reportCanUndo])
-
-  // clear request
+  // 清空请求：清空公式（也会清空 strokes）
   useEffect(() => {
     if (requestClearToken === 0) return
+    if (requestClearToken === lastClearTokenRef.current) return
+    lastClearTokenRef.current = requestClearToken
 
-    redoRef.current = [...redoRef.current, ...strokesRef.current]
-    strokesRef.current = []
-    formulasRef.current = []
-    setEditor(null)
-
-    reportCanUndo()
-    render()
-    onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() }, 'user')
-  }, [requestClearToken, onHistoryPush, render, reportCanUndo])
-
-  // fill request (background color fill)
-  useEffect(() => {
-    if (requestFillToken === 0) return
-
-    backgroundRef.current = color
     strokesRef.current = []
     redoRef.current = []
-    formulasRef.current = []
+    setFormulas([])
     setEditor(null)
 
-    reportCanUndo()
     render()
-    onHistoryPush({ id: crypto.randomUUID(), label: '填充', at: Date.now() }, 'user')
-  }, [requestFillToken, color, onHistoryPush, render, reportCanUndo])
+    onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() }, 'user')
+  }, [requestClearToken, onHistoryPush, render])
 
-  // Safari/iOS: prevent page pinch-zoom and related gesture navigation while over the canvas.
-  // Note: this is outside Pointer Events, Safari still fires these legacy events.
+  // 空格键按住 -> 临时进入平移手势
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const prevent = (ev: Event) => {
-      ev.preventDefault()
+    const down = (ev: KeyboardEvent) => {
+      if (ev.code === 'Space') {
+        // 避免页面滚动
+        ev.preventDefault()
+        setIsSpaceDown(true)
+      }
     }
-
-    // These exist in Safari. We add them anyway; in other browsers they won't fire.
-    canvas.addEventListener('gesturestart', prevent, { passive: false } as AddEventListenerOptions)
-    canvas.addEventListener('gesturechange', prevent, { passive: false } as AddEventListenerOptions)
-    canvas.addEventListener('gestureend', prevent, { passive: false } as AddEventListenerOptions)
-
-    // Also ensure wheel is non-passive at the DOM level (some setups can treat wheel as passive).
-    // We don't change behavior; React's handler will still run.
-    const wheelPrevent = (ev: WheelEvent) => {
-      // If the wheel originates on the canvas, we always want to own it.
-      ev.preventDefault()
+    const up = (ev: KeyboardEvent) => {
+      if (ev.code === 'Space') {
+        setIsSpaceDown(false)
+      }
     }
-    canvas.addEventListener('wheel', wheelPrevent, { passive: false })
-
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
     return () => {
-      canvas.removeEventListener('gesturestart', prevent as EventListener)
-      canvas.removeEventListener('gesturechange', prevent as EventListener)
-      canvas.removeEventListener('gestureend', prevent as EventListener)
-      canvas.removeEventListener('wheel', wheelPrevent)
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
     }
   }, [])
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
-
-    // Avoid browser default behaviors (auto-scroll on middle click, text selection, etc.)
     e.preventDefault()
 
-    // 文字工具：左键点击生成公式输入框
-    if (tool === 'text' && e.button === 0) {
-      openEditorAtPointer(e)
-      scheduleRender()
-      return
-    }
-
     const isMiddle = e.button === 1
-    // Some browsers/devices report middle press better via buttons bitmask during the gesture.
     const isMiddleByButtons = (e.buttons & 4) === 4
 
-    // Middle mouse button to pan
-    if (isMiddle || isMiddleByButtons) {
+    // 中键 或 空格+左键：拖拽平移
+    if (isMiddle || isMiddleByButtons || (isSpaceDown && e.button === 0)) {
       canvas.setPointerCapture(e.pointerId)
       setIsPanning(true)
-      setIsDrawing(false)
-      activeStrokeRef.current = null
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
       panStartRef.current = { pointerId: e.pointerId, startScreen: screen, startCam: { ...cameraRef.current } }
       return
     }
 
-    // Shift + left drag to pan (temporary shortcut)
-    if (e.button === 0 && (e.shiftKey || ((e.nativeEvent as PointerEvent | undefined)?.shiftKey ?? false))) {
-      canvas.setPointerCapture(e.pointerId)
-      setIsPanning(true)
-      setIsDrawing(false)
-      activeStrokeRef.current = null
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      panStartRef.current = { pointerId: e.pointerId, startScreen: screen, startCam: { ...cameraRef.current } }
-      return
+    // 文本/公式：左键点击插入
+    if (tool === 'text' && e.button === 0) {
+      openEditorAtPointer(e.clientX, e.clientY)
+      scheduleRender()
     }
-
-    // Draw with left button by default.
-    if (e.button !== 0) return
-    if (tool !== 'brush' && tool !== 'eraser') return
-
-    canvas.setPointerCapture(e.pointerId)
-    setIsDrawing(true)
-
-    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-    const world = screenToWorld(screen, cameraRef.current)
-    startStroke(world)
-    scheduleRender()
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // If the middle button is no longer pressed, end panning (safety for cases where up is missed).
-    if (isPanning && (e.buttons & 4) === 0) {
+    if (isPanning && (e.buttons & 4) === 0 && !(isSpaceDown && (e.buttons & 1) === 1)) {
       setIsPanning(false)
       panStartRef.current = null
     }
 
-    if (isPanning) {
-      e.preventDefault()
-      const s = panStartRef.current
-      if (!s) return
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      const dxScreen = screen.x - s.startScreen.x
-      const dyScreen = screen.y - s.startScreen.y
-      const cam = s.startCam
-      // Screen drag right means camera moves left in world.
-      cameraRef.current = {
-        x: cam.x - dxScreen / cam.zoom,
-        y: cam.y - dyScreen / cam.zoom,
-        zoom: cam.zoom,
-      }
-      scheduleRender()
-      return
+    if (!isPanning) return
+
+    e.preventDefault()
+    const s = panStartRef.current
+    if (!s) return
+    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+    const dxScreen = screen.x - s.startScreen.x
+    const dyScreen = screen.y - s.startScreen.y
+    const cam = s.startCam
+
+    cameraRef.current = {
+      x: cam.x - dxScreen / cam.zoom,
+      y: cam.y - dyScreen / cam.zoom,
+      zoom: cam.zoom,
     }
 
-    if (!isDrawing) return
-
-    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-    const world = screenToWorld(screen, cameraRef.current)
-    appendStrokePoint(world)
     scheduleRender()
   }
 
   const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     e.preventDefault()
 
     try {
@@ -531,49 +360,34 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (isPanning) {
       setIsPanning(false)
       panStartRef.current = null
-      return
     }
-
-    if (!isDrawing) return
-
-    setIsDrawing(false)
-    commitStroke(tool === 'eraser' ? '橡皮擦' : '画笔')
-    scheduleRender()
   }
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // This must be non-passive to prevent page scroll/zoom.
+    // 拿走滚轮，避免页面滚动
     e.preventDefault()
 
     const cam = cameraRef.current
 
-    // macOS trackpad:
-    // - Two-finger scroll => wheel without ctrlKey => pan canvas
-    // - Pinch => wheel with ctrlKey => zoom
-
-    const dx = e.deltaX
-    const dy = e.deltaY
-
-    // Pan branch (two-finger scroll)
-    if (!e.ctrlKey) {
+    // Shift + 滚轮：横向平移
+    if (e.shiftKey && !e.ctrlKey) {
       cameraRef.current = {
         ...cam,
-        x: cam.x + dx / cam.zoom,
-        y: cam.y + dy / cam.zoom,
+        x: cam.x + e.deltaY / cam.zoom,
       }
       scheduleRender()
       return
     }
 
-    // Zoom branch (pinch)
+    // 普通滚轮：缩放（以鼠标位置为中心）
     const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
     const worldBefore = screenToWorld(screen, cam)
 
     const zoomIntensity = 0.0028
-    const factor = Math.exp(-dy * zoomIntensity)
+    const factor = Math.exp(-e.deltaY * zoomIntensity)
     const nextZoom = clamp(cam.zoom * factor, 0.1, 8)
 
     cameraRef.current = {
@@ -584,66 +398,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     scheduleRender()
   }
-
-  // clear request
-  useEffect(() => {
-    if (requestClearToken === 0) return
-
-    redoRef.current = [...redoRef.current, ...strokesRef.current]
-    strokesRef.current = []
-    formulasRef.current = []
-    setEditor(null)
-
-    reportCanUndo()
-    render()
-    onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() }, 'user')
-  }, [requestClearToken, onHistoryPush, render, reportCanUndo])
-
-  // fill request (background color fill)
-  useEffect(() => {
-    if (requestFillToken === 0) return
-
-    backgroundRef.current = color
-    strokesRef.current = []
-    redoRef.current = []
-    formulasRef.current = []
-    setEditor(null)
-
-    reportCanUndo()
-    render()
-    onHistoryPush({ id: crypto.randomUUID(), label: '填充', at: Date.now() }, 'user')
-  }, [requestFillToken, color, onHistoryPush, render, reportCanUndo])
-
-  // Safari/iOS: prevent page pinch-zoom and related gesture navigation while over the canvas.
-  // Note: this is outside Pointer Events, Safari still fires these legacy events.
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const prevent = (ev: Event) => {
-      ev.preventDefault()
-    }
-
-    // These exist in Safari. We add them anyway; in other browsers they won't fire.
-    canvas.addEventListener('gesturestart', prevent, { passive: false } as AddEventListenerOptions)
-    canvas.addEventListener('gesturechange', prevent, { passive: false } as AddEventListenerOptions)
-    canvas.addEventListener('gestureend', prevent, { passive: false } as AddEventListenerOptions)
-
-    // Also ensure wheel is non-passive at the DOM level (some setups can treat wheel as passive).
-    // We don't change behavior; React's handler will still run.
-    const wheelPrevent = (ev: WheelEvent) => {
-      // If the wheel originates on the canvas, we always want to own it.
-      ev.preventDefault()
-    }
-    canvas.addEventListener('wheel', wheelPrevent, { passive: false })
-
-    return () => {
-      canvas.removeEventListener('gesturestart', prevent as EventListener)
-      canvas.removeEventListener('gesturechange', prevent as EventListener)
-      canvas.removeEventListener('gestureend', prevent as EventListener)
-      canvas.removeEventListener('wheel', wheelPrevent)
-    }
-  }, [])
 
   return (
     <div className="canvas-shell">
@@ -658,7 +412,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           onWheel={handleWheel}
         />
 
-        {/* 公式渲染层（DOM overlay，不拦截画布事件） */}
         <div className="formula-layer" data-tick={renderTick}>
           {(() => {
             const cam = cameraRef.current
@@ -668,7 +421,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
             const rect = wrap.getBoundingClientRect()
 
-            return formulasRef.current.map((f: FormulaItem) => {
+            return formulas.map((f: FormulaItem) => {
               const screenPx = worldToScreen({ x: f.x, y: f.y }, cam)
               const xCss = (screenPx.x / canvas.width) * rect.width
               const yCss = (screenPx.y / canvas.height) * rect.height
@@ -696,13 +449,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           })()}
         </div>
 
-        {/* 编辑器层（需要响应输入，所以允许 pointer events） */}
         {editor && (
           <div
             className="latex-editor"
             style={{ left: editor.css.left, top: editor.css.top }}
             onPointerDown={(ev) => {
-              // 防止把 pointerdown 透传到 canvas，导致重复打开 editor
               ev.stopPropagation()
             }}
           >
@@ -710,7 +461,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
               <textarea
                 ref={editorInputRef}
                 className="latex-editor-input"
-                placeholder={'输入 LaTeX，如：\\\\frac{a}{b}'}
+                placeholder={'输入 LaTeX 或普通文本（例如：\\\\frac{a}{b}）'}
                 value={editor.latex}
                 rows={3}
                 onChange={(ev) => setEditor((prev) => (prev ? { ...prev, latex: ev.target.value } : prev))}
@@ -742,7 +493,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
               <button type="button" onClick={() => setEditor(null)}>
                 取消
               </button>
-              <span className="latex-editor-hint">快捷键：Ctrl/⌘ + Enter 确定，Esc 取消</span>
+              <span className="latex-editor-hint">Ctrl/⌘ + Enter 确定，Esc 取消</span>
             </div>
 
             <div className="latex-editor-preview">
@@ -756,7 +507,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   })
                   return <div dangerouslySetInnerHTML={{ __html: html }} />
                 } catch {
-                  return <span style={{ color: '#c00' }}>LaTeX 渲染失败</span>
+                  // 若不是合法 LaTeX，则按纯文本显示
+                  return <div style={{ whiteSpace: 'pre-wrap' }}>{editor.latex}</div>
                 }
               })()}
             </div>
@@ -764,8 +516,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         )}
       </div>
       <div className="small-muted">
-        当前工具：{tool} ｜ 颜色：{tool === 'eraser' ? '（橡皮擦）' : color} ｜ 笔刷：{effectiveSize}px ｜
-        缩放：{cameraRef.current.zoom.toFixed(2)}x
+        当前模式：文本/公式 ｜ 缩放：{cameraRef.current.zoom.toFixed(2)}x ｜ 平移：中键拖拽 / 空格+拖拽
       </div>
     </div>
   )
