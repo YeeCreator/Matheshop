@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import katex from 'katex'
 
 export type Tool = 'select' | 'brush' | 'eraser' | 'fill' | 'text' | 'zoom'
 
@@ -53,6 +54,19 @@ type Stroke = {
   points: Array<{ x: number; y: number }>
 }
 
+type FormulaItem = {
+  id: string
+  latex: string
+  x: number
+  y: number
+  color: string
+  fontSize: number
+}
+
+function worldToScreen(world: { x: number; y: number }, cam: Camera) {
+  return { x: (world.x - cam.x) * cam.zoom, y: (world.y - cam.y) * cam.zoom }
+}
+
 // (worldToScreen currently unused; keep only screenToWorld for drawing input)
 
 function screenToWorld(screen: { x: number; y: number }, cam: Camera) {
@@ -90,6 +104,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
 
+  const formulasRef = useRef<FormulaItem[]>([])
+
   const rafRef = useRef<number | null>(null)
   const scheduleRender = useCallback(() => {
     if (rafRef.current != null) return
@@ -115,6 +131,25 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   } | null>(null)
 
   const effectiveSize = useMemo(() => clamp(brushSize, 1, 200), [brushSize])
+
+  const [editor, setEditor] = useState<
+    | null
+    | {
+        id: string
+        latex: string
+        world: { x: number; y: number }
+        css: { left: number; top: number }
+      }
+  >(null)
+
+  const editorInputRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const [renderTick, setRenderTick] = useState(0)
+
+  const bumpRenderTick = useCallback(() => {
+    // 让 overlay 的公式位置在缩放/平移后也能更新
+    setRenderTick((x) => x + 1)
+  }, [])
 
   const render = useCallback(() => {
     const canvas = canvasRef.current
@@ -199,7 +234,10 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (activeStrokeRef.current) drawStroke(activeStrokeRef.current)
 
     ctx.restore()
-  }, [])
+
+    // 同步一次 tick，确保 DOM overlay 能拿到最新 camera
+    bumpRenderTick()
+  }, [bumpRenderTick])
 
   // init + resize observer
   useEffect(() => {
@@ -265,12 +303,143 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
   }
 
+  const commitFormula = useCallback(
+    (latexRaw: string, world: { x: number; y: number }) => {
+      const latex = latexRaw.trim()
+      if (!latex) return
+
+      const next: FormulaItem = {
+        id: crypto.randomUUID(),
+        latex,
+        x: world.x,
+        y: world.y,
+        color,
+        fontSize: 22,
+      }
+
+      formulasRef.current = [...formulasRef.current, next]
+      onHistoryPush({ id: crypto.randomUUID(), label: '插入公式', at: Date.now() }, 'user')
+      scheduleRender()
+    },
+    [color, onHistoryPush, scheduleRender],
+  )
+
+  const openEditorAtPointer = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current
+      const wrap = wrapRef.current
+      if (!canvas || !wrap) return
+
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+
+      const rect = wrap.getBoundingClientRect()
+      const left = e.clientX - rect.left
+      const top = e.clientY - rect.top
+
+      setEditor({ id: crypto.randomUUID(), latex: '', world, css: { left, top } })
+    },
+    [],
+  )
+
+  // 将焦点移入编辑框
+  useEffect(() => {
+    if (!editor) return
+    const t = window.setTimeout(() => editorInputRef.current?.focus(), 0)
+    return () => window.clearTimeout(t)
+  }, [editor])
+
+  // undo request (remove last stroke)
+  useEffect(() => {
+    if (requestUndoToken === 0) return
+
+    if (strokesRef.current.length === 0) {
+      reportCanUndo()
+      return
+    }
+
+    const last = strokesRef.current[strokesRef.current.length - 1]
+    if (last) redoRef.current = [...redoRef.current, last]
+    strokesRef.current = strokesRef.current.slice(0, -1)
+
+    reportCanUndo()
+    render()
+    onHistoryPush({ id: crypto.randomUUID(), label: '撤销', at: Date.now() }, 'user')
+  }, [requestUndoToken, onHistoryPush, render, reportCanUndo])
+
+  // clear request
+  useEffect(() => {
+    if (requestClearToken === 0) return
+
+    redoRef.current = [...redoRef.current, ...strokesRef.current]
+    strokesRef.current = []
+    formulasRef.current = []
+    setEditor(null)
+
+    reportCanUndo()
+    render()
+    onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() }, 'user')
+  }, [requestClearToken, onHistoryPush, render, reportCanUndo])
+
+  // fill request (background color fill)
+  useEffect(() => {
+    if (requestFillToken === 0) return
+
+    backgroundRef.current = color
+    strokesRef.current = []
+    redoRef.current = []
+    formulasRef.current = []
+    setEditor(null)
+
+    reportCanUndo()
+    render()
+    onHistoryPush({ id: crypto.randomUUID(), label: '填充', at: Date.now() }, 'user')
+  }, [requestFillToken, color, onHistoryPush, render, reportCanUndo])
+
+  // Safari/iOS: prevent page pinch-zoom and related gesture navigation while over the canvas.
+  // Note: this is outside Pointer Events, Safari still fires these legacy events.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const prevent = (ev: Event) => {
+      ev.preventDefault()
+    }
+
+    // These exist in Safari. We add them anyway; in other browsers they won't fire.
+    canvas.addEventListener('gesturestart', prevent, { passive: false } as AddEventListenerOptions)
+    canvas.addEventListener('gesturechange', prevent, { passive: false } as AddEventListenerOptions)
+    canvas.addEventListener('gestureend', prevent, { passive: false } as AddEventListenerOptions)
+
+    // Also ensure wheel is non-passive at the DOM level (some setups can treat wheel as passive).
+    // We don't change behavior; React's handler will still run.
+    const wheelPrevent = (ev: WheelEvent) => {
+      // If the wheel originates on the canvas, we always want to own it.
+      ev.preventDefault()
+    }
+    canvas.addEventListener('wheel', wheelPrevent, { passive: false })
+
+    return () => {
+      canvas.removeEventListener('gesturestart', prevent as EventListener)
+      canvas.removeEventListener('gesturechange', prevent as EventListener)
+      canvas.removeEventListener('gestureend', prevent as EventListener)
+      canvas.removeEventListener('wheel', wheelPrevent)
+    }
+  }, [])
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
     // Avoid browser default behaviors (auto-scroll on middle click, text selection, etc.)
     e.preventDefault()
+
+    // 文字工具：左键点击生成公式输入框
+    if (tool === 'text' && e.button === 0) {
+      openEditorAtPointer(e)
+      scheduleRender()
+      return
+    }
 
     const isMiddle = e.button === 1
     // Some browsers/devices report middle press better via buttons bitmask during the gesture.
@@ -416,30 +585,14 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     scheduleRender()
   }
 
-  // undo request (remove last stroke)
-  useEffect(() => {
-    if (requestUndoToken === 0) return
-
-    if (strokesRef.current.length === 0) {
-      reportCanUndo()
-      return
-    }
-
-    const last = strokesRef.current.at(-1)
-    if (last) redoRef.current = [...redoRef.current, last]
-    strokesRef.current = strokesRef.current.slice(0, -1)
-
-    reportCanUndo()
-    render()
-    onHistoryPush({ id: crypto.randomUUID(), label: '撤销', at: Date.now() }, 'user')
-  }, [requestUndoToken, onHistoryPush, render, reportCanUndo])
-
   // clear request
   useEffect(() => {
     if (requestClearToken === 0) return
 
     redoRef.current = [...redoRef.current, ...strokesRef.current]
     strokesRef.current = []
+    formulasRef.current = []
+    setEditor(null)
 
     reportCanUndo()
     render()
@@ -453,6 +606,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     backgroundRef.current = color
     strokesRef.current = []
     redoRef.current = []
+    formulasRef.current = []
+    setEditor(null)
 
     reportCanUndo()
     render()
@@ -502,6 +657,111 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           onPointerCancel={handlePointerUpOrCancel}
           onWheel={handleWheel}
         />
+
+        {/* 公式渲染层（DOM overlay，不拦截画布事件） */}
+        <div className="formula-layer" data-tick={renderTick}>
+          {(() => {
+            const cam = cameraRef.current
+            const canvas = canvasRef.current
+            const wrap = wrapRef.current
+            if (!canvas || !wrap) return null
+
+            const rect = wrap.getBoundingClientRect()
+
+            return formulasRef.current.map((f: FormulaItem) => {
+              const screenPx = worldToScreen({ x: f.x, y: f.y }, cam)
+              const xCss = (screenPx.x / canvas.width) * rect.width
+              const yCss = (screenPx.y / canvas.height) * rect.height
+
+              let html = ''
+              try {
+                html = katex.renderToString(f.latex, {
+                  throwOnError: false,
+                  displayMode: true,
+                  output: 'html',
+                })
+              } catch {
+                html = `<span style="color:#c00">LaTeX 渲染失败</span>`
+              }
+
+              return (
+                <div
+                  key={f.id}
+                  className="formula-item"
+                  style={{ left: xCss, top: yCss, color: f.color, fontSize: f.fontSize }}
+                  dangerouslySetInnerHTML={{ __html: html }}
+                />
+              )
+            })
+          })()}
+        </div>
+
+        {/* 编辑器层（需要响应输入，所以允许 pointer events） */}
+        {editor && (
+          <div
+            className="latex-editor"
+            style={{ left: editor.css.left, top: editor.css.top }}
+            onPointerDown={(ev) => {
+              // 防止把 pointerdown 透传到 canvas，导致重复打开 editor
+              ev.stopPropagation()
+            }}
+          >
+            <div className="latex-editor-row">
+              <textarea
+                ref={editorInputRef}
+                className="latex-editor-input"
+                placeholder={'输入 LaTeX，如：\\\\frac{a}{b}'}
+                value={editor.latex}
+                rows={3}
+                onChange={(ev) => setEditor((prev) => (prev ? { ...prev, latex: ev.target.value } : prev))}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Escape') {
+                    ev.preventDefault()
+                    setEditor(null)
+                    return
+                  }
+                  if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                    ev.preventDefault()
+                    commitFormula(editor.latex, editor.world)
+                    setEditor(null)
+                  }
+                }}
+              />
+            </div>
+
+            <div className="latex-editor-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  commitFormula(editor.latex, editor.world)
+                  setEditor(null)
+                }}
+              >
+                确定
+              </button>
+              <button type="button" onClick={() => setEditor(null)}>
+                取消
+              </button>
+              <span className="latex-editor-hint">快捷键：Ctrl/⌘ + Enter 确定，Esc 取消</span>
+            </div>
+
+            <div className="latex-editor-preview">
+              {(() => {
+                if (!editor.latex.trim()) return <span className="latex-editor-preview-empty">预览</span>
+                try {
+                  const html = katex.renderToString(editor.latex, {
+                    throwOnError: false,
+                    displayMode: true,
+                    output: 'html',
+                  })
+                  return <div dangerouslySetInnerHTML={{ __html: html }} />
+                } catch {
+                  return <span style={{ color: '#c00' }}>LaTeX 渲染失败</span>
+                }
+              })()}
+            </div>
+          </div>
+        )}
       </div>
       <div className="small-muted">
         当前工具：{tool} ｜ 颜色：{tool === 'eraser' ? '（橡皮擦）' : color} ｜ 笔刷：{effectiveSize}px ｜
