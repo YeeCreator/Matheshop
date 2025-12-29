@@ -532,10 +532,14 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       if (ev.key !== 'Escape') return
       draggingFormulaRef.current = null
       draggingCellRef.current = null
+      draggingEdgeRef.current = null
+      resizingCellRef.current = null
+      setHoverPort(null)
       setIsPanning(false)
       panStartRef.current = null
       setSelectedFormulaId(null)
       setSelectedCellId(null)
+      setSelectedEdgeId(null)
       setEditingCellId(null)
       setLinkFromId(null)
     }
@@ -543,12 +547,97 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-    // --- Obsidian Canvas 风格：连线 ---
-    const [edges, setEdges] = useState<CanvasEdge[]>([])
-    const [isLinkMode, setIsLinkMode] = useState(false)
-    const [linkFromId, setLinkFromId] = useState<CellId | null>(null)
+  // --- Obsidian Canvas / draw.io 风格：连线 ---
+  const [edges, setEdges] = useState<CanvasEdge[]>([])
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
 
-    const draggingEdgeRef = useRef<
+  /** 右下角缩放手柄拖拽状态 */
+  const resizingCellRef = useRef<
+    | null
+    | {
+        id: string
+        pointerId: number
+        startWorld: { x: number; y: number }
+        startSize: { w: number; h: number }
+        aspect: number
+      }
+  >(null)
+
+  // 多选相关 state
+  const [selectionBox, setSelectionBox] = useState<null | { start: { x: number; y: number }; end: { x: number; y: number } }>(null)
+  const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([])
+  const selectionStartRef = useRef<null | { x: number; y: number }> (null)
+  const isBoxSelectingRef = useRef(false)
+
+  // 框选辅助函数
+  function getBoxRect(a: { x: number; y: number }, b: { x: number; y: number }) {
+    return {
+      x: Math.min(a.x, b.x),
+      y: Math.min(a.y, b.y),
+      w: Math.abs(a.x - b.x),
+      h: Math.abs(a.y - b.y),
+    }
+  }
+
+  // 判断节点是否与选区相交
+  function cellIntersectsBox(cell: CellNode, box: { x: number; y: number; w: number; h: number }, parentWorld: { x: number; y: number }) {
+    const world = { x: parentWorld.x + cell.localPos.x, y: parentWorld.y + cell.localPos.y }
+    return !(
+      world.x + cell.size.w < box.x ||
+      world.x > box.x + box.w ||
+      world.y + cell.size.h < box.y ||
+      world.y > box.y + box.h
+    )
+  }
+
+  const deleteSelected = useCallback(() => {
+    // 优先删除连接
+    if (selectedEdgeId) {
+      setEdges((prev) => prev.filter((e) => e.id !== selectedEdgeId))
+      setSelectedEdgeId(null)
+      onHistoryPush({ id: crypto.randomUUID(), label: '删除连接', at: Date.now() }, 'user')
+      scheduleRender()
+      return
+    }
+
+    // 再删除节点
+    if (!selectedCellId) return
+    const targetId = selectedCellId
+
+    setCells((prev) => removeCellById(prev, targetId).next)
+    setEdges((prev) => prev.filter((e) => e.from !== targetId && e.to !== targetId))
+
+    setSelectedCellId(null)
+    setEditingCellId(null)
+    setDropHintCellId(null)
+    setHoverPort(null)
+
+    onHistoryPush({ id: crypto.randomUUID(), label: '删除单元节点', at: Date.now() }, 'user')
+    scheduleRender()
+  }, [onHistoryPush, removeCellById, scheduleRender, selectedCellId, selectedEdgeId, multiSelectedIds])
+
+  // Delete/Backspace：删除选中边/节点（输入框内不拦截）
+  useEffect(() => {
+    const onKeyDown = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement | null
+      const tag = t?.tagName?.toLowerCase()
+      const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
+      if (tag === 'textarea' || tag === 'input' || isEditable) return
+
+      if (ev.key === 'Delete' || ev.key === 'Backspace') {
+        ev.preventDefault()
+        deleteSelected()
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [deleteSelected])
+
+  const [isLinkMode, setIsLinkMode] = useState(false)
+  const [linkFromId, setLinkFromId] = useState<CellId | null>(null)
+
+  const draggingEdgeRef = useRef<
     | null
     | {
         pointerId: number
@@ -558,11 +647,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         toPort: PortSide | null
         pointerWorld: { x: number; y: number }
       }
-    >(null)
+  >(null)
 
-    const [hoverPort, setHoverPort] = useState<null | { cellId: CellId; port: PortSide }>(null)
+  const [hoverPort, setHoverPort] = useState<null | { cellId: CellId; port: PortSide }>(null)
 
-    const ensureEdge = useCallback((from: CellId, to: CellId, fromPort?: PortSide, toPort?: PortSide) => {
+  const ensureEdge = useCallback((from: CellId, to: CellId, fromPort?: PortSide, toPort?: PortSide) => {
     if (from === to) return
     setEdges((prev) => {
       const exists = prev.some(
@@ -573,9 +662,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       if (exists) return prev
       return [...prev, { id: crypto.randomUUID(), from, to, fromPort, toPort }]
     })
-    }, [])
+  }, [])
 
-    const getPortWorld = useCallback(
+  const getPortWorld = useCallback(
     (cellId: CellId, port: PortSide, hits: ReturnType<typeof collectCellWorldHits>): { x: number; y: number } | null => {
       const hit = hits.find((h) => h.id === cellId)
       const n = findCellById(cells, cellId)
@@ -590,12 +679,12 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       if (port === 'n') return { x: x0 + w / 2, y: y0 + margin }
       if (port === 's') return { x: x0 + w / 2, y: y0 + h - margin }
       if (port === 'w') return { x: x0 + margin, y: y0 + h / 2 }
-      return { x: x0 + w - margin, y: y0 + h / 2 } // 'e'
+      return { x: x0 + w - margin, y: y0 + h / 2 }
     },
     [cells, findCellById],
-    )
+  )
 
-    const pickNearestPort = useCallback(
+  const pickNearestPort = useCallback(
     (pointerWorld: { x: number; y: number }): { cellId: CellId; port: PortSide } | null => {
       const hits = collectCellWorldHits(cells)
       const ports: PortSide[] = ['n', 'e', 's', 'w']
@@ -605,7 +694,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         const n = findCellById(cells, h.id)
         if (!n) continue
 
-        // 粗略阈值：离节点矩形一定范围内才算候选
         const pad = 24
         const inPad =
           pointerWorld.x >= h.rect.x - pad &&
@@ -624,13 +712,12 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         }
       }
 
-      // 吸附阈值（world 单位，和 zoom 无关）：
       const snapDist = 26
       if (!best || best.dist2 > snapDist * snapDist) return null
       return { cellId: best.cellId, port: best.port }
     },
     [cells, collectCellWorldHits, findCellById, getPortWorld],
-    )
+  )
 
   // L：切换连线模式；Esc：退出连线模式并清空起点
   useEffect(() => {
@@ -688,6 +775,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (e.button === 0) {
       setSelectedFormulaId(null)
       setSelectedCellId(null)
+      setSelectedEdgeId(null)
     }
 
     // 左键点击插入：创建一个根 Cell（worldPos/localPos 同值），便于你看到 Notebook 风格骨架
@@ -729,11 +817,50 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       scheduleRender()
       return
     }
+
+    // 框选：空白处左键按下且无 modifier
+    if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current && !draggingCellRef.current) {
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+      selectionStartRef.current = world
+      setSelectionBox({ start: world, end: world })
+      isBoxSelectingRef.current = true
+      return
+    }
   }
 
-    const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
+
+    // 框选中
+    if (isBoxSelectingRef.current && selectionStartRef.current) {
+      e.preventDefault()
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+      setSelectionBox((prev) => prev ? { ...prev, end: world } : null)
+      return
+    }
+
+    // 多选拖动：拖动选中节点时，所有被选中的节点一起移动
+    if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId && multiSelectedIds.length > 1) {
+      e.preventDefault()
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+      const d = draggingCellRef.current
+      const dxWorld = world.x - d.startWorld.x
+      const dyWorld = world.y - d.startWorld.y
+      setCells((prev) => {
+        return prev.map((cell) => {
+          if (multiSelectedIds.includes(cell.id)) {
+            return { ...cell, localPos: { x: cell.localPos.x + dxWorld, y: cell.localPos.y + dyWorld } }
+          }
+          return cell
+        })
+      })
+      scheduleRender()
+      return
+    }
 
     // 拖拽连线
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
@@ -832,10 +959,43 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     scheduleRender()
   }
 
-    const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     e.preventDefault()
+
+    // 框选结束
+    if (isBoxSelectingRef.current && selectionStartRef.current && selectionBox) {
+      isBoxSelectingRef.current = false
+      const box = getBoxRect(selectionBox.start, selectionBox.end)
+      // 遍历所有节点，判断是否与 box 相交
+      const selected: string[] = []
+      const walk = (nodes: CellNode[], parentWorld: { x: number; y: number }) => {
+        for (const n of nodes) {
+          if (cellIntersectsBox(n, box, parentWorld)) selected.push(n.id)
+          if (n.children.length > 0) walk(n.children, { x: parentWorld.x + n.localPos.x, y: parentWorld.y + n.localPos.y })
+        }
+      }
+      walk(cells, { x: 0, y: 0 })
+      setMultiSelectedIds(selected)
+      setSelectionBox(null)
+      selectionStartRef.current = null
+      scheduleRender()
+      return
+    }
+
+    // 结束缩放节点
+    if (resizingCellRef.current && resizingCellRef.current.pointerId === e.pointerId) {
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
+      resizingCellRef.current = null
+      onHistoryPush({ id: crypto.randomUUID(), label: '缩放单元节点', at: Date.now() }, 'user')
+      scheduleRender()
+      return
+    }
 
     // 结束拖拽连线
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
@@ -931,7 +1091,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       setIsPanning(false)
       panStartRef.current = null
     }
-    }
+  }
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -1030,6 +1190,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
               return `M ${aCss.x} ${aCss.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${bCss.x} ${bCss.y}`
             }
 
+            const selectedId = selectedEdgeId
+
             const edgePaths = edges
               .map((e) => {
                 const aW = portOrCenter(e.from, e.fromPort)
@@ -1038,7 +1200,23 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                 const a = worldToCss(aW)
                 const b = worldToCss(bW)
                 const d = makeCurveD(a, b)
-                return <path key={e.id} d={d} className="edge-path" />
+                const isSelected = selectedId === e.id
+                return (
+                  <path
+                    key={e.id}
+                    d={d}
+                    className={`edge-path${isSelected ? ' is-selected' : ''}`}
+                    onPointerDown={(ev) => {
+                      // 允许选中边（edge-layer pointer-events 需在 CSS 里打开）
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      setSelectedEdgeId(e.id)
+                      setSelectedCellId(null)
+                      setSelectedFormulaId(null)
+                      scheduleRender()
+                    }}
+                  />
+                )
               })
               .filter(Boolean)
 
@@ -1154,6 +1332,38 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                 )
               }
 
+              const renderResizeHandle = () => {
+                const isSelected = selectedCellId === c.id
+                if (!isSelected) return null
+
+                return (
+                  <div
+                    className="cell-resize-handle"
+                    style={{ left: c.size.w - 10, top: c.size.h - 10 }}
+                    onPointerDown={(ev) => {
+                      ev.preventDefault()
+                      ev.stopPropagation()
+
+                      const canvasEl = canvasRef.current
+                      if (!canvasEl) return
+
+                      canvasEl.setPointerCapture(ev.pointerId)
+                      const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+                      const world = screenToWorld(screen, cameraRef.current)
+
+                      resizingCellRef.current = {
+                        id: c.id,
+                        pointerId: ev.pointerId,
+                        startWorld: world,
+                        startSize: { ...c.size },
+                        aspect: c.size.w / Math.max(1, c.size.h),
+                      }
+                    }}
+                    title="拖拽缩放（Shift 锁定比例）"
+                  />
+                )
+              }
+
               return (
                 <div
                   key={c.id}
@@ -1188,6 +1398,22 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                     const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
                     const world = screenToWorld(screen, cameraRef.current)
 
+                    // setSelectedCellId(c.id)
+                    if (multiSelectedIds.length > 1 && multiSelectedIds.includes(c.id)) {
+                      // 多选拖动
+                      canvasEl.setPointerCapture(ev.pointerId)
+                      const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+                      const world = screenToWorld(screen, cameraRef.current)
+                      draggingCellRef.current = {
+                        id: c.id,
+                        pointerId: ev.pointerId,
+                        startWorld: world,
+                        startPos: { x: c.localPos.x, y: c.localPos.y },
+                        parentWorld,
+                      }
+                      return
+                    }
+
                     draggingCellRef.current = {
                       id: c.id,
                       pointerId: ev.pointerId,
@@ -1205,6 +1431,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   }}
                 >
                   {renderPorts()}
+                  {renderResizeHandle()}
 
                   <div className="cell-header">
                     <span className="cell-title">{title}</span>
@@ -1443,6 +1670,23 @@ export default function CanvasBoard(props: CanvasBoardProps) {
               })()}
             </div>
           </div>
+        )}
+
+        {selectionBox && (
+          <div
+            className="canvas-selection-box"
+            style={{
+              position: 'absolute',
+              left: Math.min(selectionBox.start.x, selectionBox.end.x),
+              top: Math.min(selectionBox.start.y, selectionBox.end.y),
+              width: Math.abs(selectionBox.start.x - selectionBox.end.x),
+              height: Math.abs(selectionBox.start.y - selectionBox.end.y),
+              background: 'rgba(0,120,255,0.12)',
+              border: '1.5px solid #1890ff',
+              pointerEvents: 'none',
+              zIndex: 10,
+            }}
+          />
         )}
       </div>
       <div className="small-muted">
