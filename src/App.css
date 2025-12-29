@@ -77,6 +77,15 @@
   transform-origin: left top;
   will-change: transform, left, top;
   color: #111;
+  pointer-events: auto;
+  cursor: move;
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+
+.formula-item.is-selected {
+  outline: 2px solid rgba(33, 150, 243, 0.9);
+  background: rgba(33, 150, 243, 0.06);
 }
 
 /* 编辑器浮层 */

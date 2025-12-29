@@ -92,6 +92,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
   const [formulas, setFormulas] = useState<FormulaItem[]>([])
 
+  const [selectedFormulaId, setSelectedFormulaId] = useState<string | null>(null)
+  const draggingFormulaRef = useRef<
+    | null
+    | {
+        id: string
+        pointerId: number
+        startWorld: { x: number; y: number }
+        startFormula: { x: number; y: number }
+      }
+  >(null)
+
   const didInitRef = useRef(false)
   const lastClearTokenRef = useRef<number>(0)
 
@@ -294,9 +305,29 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
   }, [])
 
+  // Esc 取消选中 / 取消拖拽
+  useEffect(() => {
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return
+      draggingFormulaRef.current = null
+      setIsPanning(false)
+      panStartRef.current = null
+      setSelectedFormulaId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
+
+    // 如果正在拖拽公式，不要让画布再吃到新的 pointerdown
+    if (draggingFormulaRef.current) {
+      e.preventDefault()
+      return
+    }
+
     e.preventDefault()
 
     const isMiddle = e.button === 1
@@ -313,6 +344,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     // 文本/公式：左键点击插入
     if (tool === 'text' && e.button === 0) {
+      setSelectedFormulaId(null)
       openEditorAtPointer(e.clientX, e.clientY)
       scheduleRender()
     }
@@ -321,6 +353,22 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
+
+    // 拖拽公式：优先级最高
+    if (draggingFormulaRef.current && draggingFormulaRef.current.pointerId === e.pointerId) {
+      e.preventDefault()
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+      const d = draggingFormulaRef.current
+      const dx = world.x - d.startWorld.x
+      const dy = world.y - d.startWorld.y
+
+      setFormulas((prev) =>
+        prev.map((f) => (f.id === d.id ? { ...f, x: d.startFormula.x + dx, y: d.startFormula.y + dy } : f)),
+      )
+      scheduleRender()
+      return
+    }
 
     if (isPanning && (e.buttons & 4) === 0 && !(isSpaceDown && (e.buttons & 1) === 1)) {
       setIsPanning(false)
@@ -351,10 +399,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (!canvas) return
     e.preventDefault()
 
-    try {
-      canvas.releasePointerCapture(e.pointerId)
-    } catch {
-      // ignore
+    // 结束拖拽公式
+    if (draggingFormulaRef.current && draggingFormulaRef.current.pointerId === e.pointerId) {
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
+      draggingFormulaRef.current = null
+      scheduleRender()
+      return
     }
 
     if (isPanning) {
@@ -437,11 +491,38 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                 html = `<span style="color:#c00">LaTeX 渲染失败</span>`
               }
 
+              const isSelected = selectedFormulaId === f.id
+
               return (
                 <div
                   key={f.id}
-                  className="formula-item"
+                  className={`formula-item${isSelected ? ' is-selected' : ''}`}
                   style={{ left: xCss, top: yCss, color: f.color, fontSize: f.fontSize }}
+                  onPointerDown={(ev) => {
+                    // 让公式可交互：阻止事件冒泡到 canvas
+                    ev.preventDefault()
+                    ev.stopPropagation()
+
+                    const canvasEl = canvasRef.current
+                    if (!canvasEl) return
+
+                    setSelectedFormulaId(f.id)
+
+                    // 左键开始拖拽
+                    if (ev.button !== 0) return
+
+                    canvasEl.setPointerCapture(ev.pointerId)
+
+                    const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+                    const world = screenToWorld(screen, cameraRef.current)
+
+                    draggingFormulaRef.current = {
+                      id: f.id,
+                      pointerId: ev.pointerId,
+                      startWorld: world,
+                      startFormula: { x: f.x, y: f.y },
+                    }
+                  }}
                   dangerouslySetInnerHTML={{ __html: html }}
                 />
               )
