@@ -1,6 +1,6 @@
 import { evalWithPythonEngine, type PythonEngineEvalResponse } from './pythonEngineClient'
 import type { EngineChoice } from './engineSelection'
-import { evalWithNativeEngine } from './nativeEngine'
+import { evalWithNativeEngine } from '../../engine/engine_ts/src/nativeEngine'
 
 export type EngineEvalOk = {
   ok: true

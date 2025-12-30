@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evalWithNativeEngine } from './nativeEngine'
+import { evalWithNativeEngine } from '../../engine/engine_ts/src/nativeEngine'
 
 describe('nativeEngine', () => {
   it('evaluates basic arithmetic', () => {
