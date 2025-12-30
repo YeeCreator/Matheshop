@@ -6,7 +6,8 @@ import FormulaLayer from './canvas/FormulaLayer'
 import ExprTokenView from './canvas/ExprTokenView'
 import InlineExprEditor from './canvas/InlineExprEditor'
 import { parseArithExpr } from '../symbolic/arithParser'
-import { evalWithPythonEngine } from '../symbolic/pythonEngineClient'
+import { evalExpression } from '../symbolic/engineClient'
+import type { EngineSelectionState } from '../symbolic/engineSelection'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
   addChildToParent,
@@ -64,6 +65,19 @@ type FormulaItem = {
 
 export default function CanvasBoard(props: CanvasBoardProps) {
   const { tool, color, onHistoryPush, requestClearToken } = props
+
+  // Engine selection（由 App 通过 window 事件同步；避免额外全局状态库）
+  const engineSelectionRef = useRef<EngineSelectionState>({ choice: 'builtin_native' })
+  useEffect(() => {
+    const onEngineSelection = (ev: Event) => {
+      const ce = ev as CustomEvent
+      const next = ce.detail as EngineSelectionState | undefined
+      if (!next) return
+      engineSelectionRef.current = next
+    }
+    window.addEventListener('matheshop:engineSelection', onEngineSelection as EventListener)
+    return () => window.removeEventListener('matheshop:engineSelection', onEngineSelection as EventListener)
+  }, [])
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -399,7 +413,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     onHistoryPush({ id: crypto.randomUUID(), label: '删除单元节点', at: Date.now() }, 'user')
     scheduleRender()
-  }, [onHistoryPush, removeCellById, scheduleRender, selectedCellId, selectedEdgeId, multiSelectedIds])
+  }, [onHistoryPush, scheduleRender, selectedCellId, selectedEdgeId])
 
   // Delete/Backspace：删除选中边/节点（输入框内不拦截）
   useEffect(() => {
@@ -1206,19 +1220,23 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                               })),
                             )
 
-                            // 再尝试调用 Python 引擎做“算术求值”（第一阶段）
+                            // 再尝试根据设置选择引擎做“算术求值”（第一阶段）
                             ;(async () => {
-                              const resp = await evalWithPythonEngine({ text: c.content })
-                              setCells((prev) =>
-                                updateCellById(prev, c.id, (next) => {
-                                  const base = next.blocks && next.blocks.length > 0 ? next.blocks : parseBlocksFromText(next.content)
-                                  const line = resp.ok ? `= ${resp.result.value}` : `⚠ ${resp.error.message}`
-                                  return {
-                                    ...next,
-                                    blocks: [...base, { id: crypto.randomUUID(), type: 'text', text: line }],
-                                  }
-                                }),
-                              )
+                              const selection = engineSelectionRef.current
+                              const resp = await evalExpression({
+                                text: c.content,
+                                engine: { choice: selection.choice },
+                              })
+                               setCells((prev) =>
+                                 updateCellById(prev, c.id, (next) => {
+                                   const base = next.blocks && next.blocks.length > 0 ? next.blocks : parseBlocksFromText(next.content)
+                                   const line = resp.ok ? `= ${resp.result.value}` : `⚠ ${resp.error.message}`
+                                   return {
+                                     ...next,
+                                     blocks: [...base, { id: crypto.randomUUID(), type: 'text', text: line }],
+                                   }
+                                 }),
+                               )
                             })()
 
                             onHistoryPush({ id: crypto.randomUUID(), label: '编辑单元框', at: Date.now() }, 'user')

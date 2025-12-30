@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import CanvasBoard, { type CanvasHistorySource, type HistoryEntry, type Tool } from './components/CanvasBoard'
 import InspectorPanel from './components/InspectorPanel'
+import {
+  DEFAULT_ENGINE_SELECTION,
+  loadEngineSelection,
+  saveEngineSelection,
+  type EngineChoice,
+  type EngineSelectionState,
+} from './symbolic/engineSelection'
 import './App.css'
 
 const TOOL_LABELS: Record<Tool, string> = {
@@ -21,6 +28,22 @@ function App() {
   const [tool, setTool] = useState<Tool>('text')
   const [color, setColor] = useState('#111111')
   const [history, setHistory] = useState<HistoryEntry[]>([])
+
+  const [engineSelection, setEngineSelection] = useState<EngineSelectionState>(() => {
+    if (typeof window === 'undefined') return DEFAULT_ENGINE_SELECTION
+    return loadEngineSelection()
+  })
+
+  useEffect(() => {
+    saveEngineSelection(engineSelection)
+    window.dispatchEvent(new CustomEvent('matheshop:engineSelection', { detail: engineSelection }))
+  }, [engineSelection])
+
+  useEffect(() => {
+    // 确保首次挂载时也广播一次（CanvasBoard 可能比设置渲染更早读取）
+    window.dispatchEvent(new CustomEvent('matheshop:engineSelection', { detail: engineSelection }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // simple layers placeholder
   const layers = useMemo(() => ['图层 1'], [])
@@ -114,6 +137,34 @@ function App() {
           onApply={requestApply}
           onCancel={requestCancel}
         />
+
+        <div className="panel">
+          <h3>符号计算系统引擎</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(
+              [
+                { value: 'builtin_native', label: '内置原生计算引擎' },
+                { value: 'builtin_python', label: '内置 Python 计算引擎' },
+                { value: 'external', label: '外接计算引擎' },
+              ] as Array<{ value: EngineChoice; label: string }>
+            ).map((opt) => (
+              <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="radio"
+                  name="matheshop-engine-choice"
+                  value={opt.value}
+                  checked={engineSelection.choice === opt.value}
+                  onChange={() => setEngineSelection((prev) => ({ ...prev, choice: opt.value }))}
+                />
+                {opt.label}
+              </label>
+            ))}
+
+            <div className="small-muted">
+              默认使用“内置原生计算引擎（TS 本地）”，不需要启动后端；只有选择“内置 Python 计算引擎/外接计算引擎”时才需要后端能力（外接目前仅 UI 占位）。
+            </div>
+          </div>
+        </div>
 
         <div className="panel">
           <h3>图层</h3>

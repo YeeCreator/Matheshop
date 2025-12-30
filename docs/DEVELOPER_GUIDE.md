@@ -47,24 +47,24 @@ pnpm preview
 - 交互问题优先从 `src/components/CanvasBoard.tsx` 的 pointer/keyboard handler 入手。
 - 坐标系相关 bug：优先检查 `src/components/canvas/utils/geometry.ts` 的 screen/world 换算，以及 CSS 尺寸（wrap 的 bounding box）。
 
-## 2.5 自研 Python 计算引擎（engine/）
+## 2.5 自研 Python 计算引擎（engine/engine_python/）
 
-项目内置一个可独立抽取的 Python 子工程：`engine/`。
+项目内置一个可独立抽取的 Python 子工程：`engine/engine_python/`（用于与后续 TS 引擎区分）。
 
-- 核心库：`engine/matheshop_engine`（AST + 解析 + NumPy 求值；当前阶段：算术）
-- HTTP 服务：`engine/matheshop_engine_server`（FastAPI）
+- 核心库：`engine/engine_python/matheshop_engine`（AST + 解析 + NumPy 求值；当前阶段：算术）
+- HTTP 服务：`engine/engine_python/matheshop_engine_server`（FastAPI）
 
 ### 2.5.1 Python 环境与依赖
 
-推荐使用 `engine/.venv`（不要和仓库根目录的其他 venv 混用）。
+推荐使用 `engine/engine_python/.venv`（不要和仓库根目录的其他 venv 混用）。
 
 ```powershell
-cd engine
+cd engine\engine_python
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 > 说明：
-> - `engine/.venv` 已存在时，直接复用即可。
+> - `engine/engine_python/.venv` 已存在时，直接复用即可。
 > - `requirements.txt` 已包含 `numpy/fastapi/uvicorn/pydantic`。
 
 ### 2.5.2 启动后端服务
@@ -72,7 +72,7 @@ cd engine
 默认端口：`8000`。也支持通过环境变量配置端口：`PORT`。
 
 ```powershell
-cd engine
+cd engine\engine_python
 $env:PORT = 8000
 .\.venv\Scripts\python.exe -m matheshop_engine_server
 ```
@@ -88,7 +88,7 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 PowerShell 对 JSON 字符串/`^` 有很多转义坑，推荐直接跑 Python 脚本验证接口：
 
 ```powershell
-cd engine
+cd engine\engine_python
 .\.venv\Scripts\python.exe scripts\smoke_test.py
 ```
 
@@ -96,8 +96,8 @@ cd engine
 
 `Run > Edit Configurations...` 新建一个 Python 运行配置：
 
-- **Interpreter**：`engine\.venv\Scripts\python.exe`
-- **Working directory**：`engine`
+- **Interpreter**：`engine\engine_python\.venv\Scripts\python.exe`
+- **Working directory**：`engine\engine_python`
 - **Module name**：`matheshop_engine_server`
 - （可选）Environment：`PORT=8000`
 
@@ -125,7 +125,7 @@ pnpm dev
 Invoke-RestMethod http://127.0.0.1:5173/api/engine/health
 ```
 
-前端调用封装：`src/symbolic/pythonEngineClient.ts`
+前端调用封装：`src/symbolic/pythonEngineClient.ts`（当你在界面里选择“内置 Python 计算引擎”时使用）
 
 - 默认走 `/api/engine/v1/eval`（开发推荐）
 - 如需直连后端（例如生产环境/非代理），可设置 `VITE_ENGINE_BASE_URL`（例如 `http://127.0.0.1:8000`）
@@ -194,27 +194,29 @@ M2 目前采用 **tokenRange 文本替换**：
 ## 3. 目录结构与职责边界
 
 ```
-src/
-  App.tsx
-  components/
-    CanvasBoard.tsx
-    cellTypes.ts
-    canvas/
-      EdgeLayer.tsx
-      FormulaLayer.tsx
-      domain/
-        cellTree.ts
-        edges.ts
-      utils/
-        blocks.ts
-        geometry.ts
-  symbolic/
-    pythonEngineClient.ts
+ src/
+   App.tsx
+   components/
+     CanvasBoard.tsx
+     cellTypes.ts
+     canvas/
+       EdgeLayer.tsx
+       FormulaLayer.tsx
+       domain/
+         cellTree.ts
+         edges.ts
+       utils/
+         blocks.ts
+         geometry.ts
+   symbolic/
+     pythonEngineClient.ts
 
 engine/
-  matheshop_engine/
-  matheshop_engine_server/
-  scripts/
+  engine_ts/
+  engine_python/
+    matheshop_engine/
+    matheshop_engine_server/
+    scripts/
 ```
 
 ### 3.1 `cellTypes.ts`（领域类型）
@@ -317,4 +319,4 @@ pnpm build
 提交 PR 前至少保证：
 - lint/build 通过
 - 手动 smoke test：创建/编辑 cell、拖拽、连线、插入公式、清空画布
-- 后端 smoke test：`engine/scripts/smoke_test.py`
+- 后端 smoke test：`engine/engine_python/scripts/smoke_test.py`
