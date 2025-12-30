@@ -3,6 +3,7 @@ import katex from 'katex'
 import type { CanvasEdge, CellId, CellNode, PortSide } from './cellTypes'
 import EdgeLayer from './canvas/EdgeLayer'
 import FormulaLayer from './canvas/FormulaLayer'
+import { evalWithPythonEngine } from '../symbolic/pythonEngineClient'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
   addChildToParent,
@@ -1160,12 +1161,32 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                           if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
                             ev.preventDefault()
                             setEditingCellId(null)
+
+                            // 先把内容解析成 blocks（维持原行为）
                             setCells((prev) =>
                               updateCellById(prev, c.id, (next) => ({
                                 ...next,
                                 blocks: parseBlocksFromText(next.content),
                               })),
                             )
+
+                            // 再尝试调用 Python 引擎做“算术求值”（第一阶段）
+                            ;(async () => {
+                              const resp = await evalWithPythonEngine({ text: c.content })
+                              setCells((prev) =>
+                                updateCellById(prev, c.id, (next) => {
+                                  const base = next.blocks && next.blocks.length > 0 ? next.blocks : parseBlocksFromText(next.content)
+                                  const line = resp.ok
+                                    ? `= ${resp.result.value}`
+                                    : `⚠ ${resp.error.message}`
+                                  return {
+                                    ...next,
+                                    blocks: [...base, { id: crypto.randomUUID(), type: 'text', text: line }],
+                                  }
+                                }),
+                              )
+                            })()
+
                             onHistoryPush({ id: crypto.randomUUID(), label: '编辑单元框', at: Date.now() }, 'user')
                           }
                         }}
