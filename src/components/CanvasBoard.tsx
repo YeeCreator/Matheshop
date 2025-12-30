@@ -1,97 +1,43 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import katex from 'katex'
-import type { CanvasEdge, CellBlock, CellId, CellNode, LatexBlock, PortSide, TextBlock } from './cellTypes'
+import type { CanvasEdge, CellId, CellNode, PortSide } from './cellTypes'
+import EdgeLayer from './canvas/EdgeLayer'
+import FormulaLayer from './canvas/FormulaLayer'
+import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
+import {
+  addChildToParent,
+  collectCellWorldHits,
+  findCellById,
+  pickDropParentId,
+  recomputeWorldAll,
+  removeCellById,
+  updateCellById,
+} from './canvas/domain/cellTree'
+import {
+  clamp,
+  type Camera,
+  getCanvasScreenPoint,
+  resizeCanvasToDisplaySize,
+  screenToWorld,
+  worldToScreen,
+} from './canvas/utils/geometry'
+import { parseBlocksFromText, renderBlocksToHtml } from './canvas/utils/blocks'
 
-function escapeHtml(s: string) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export type Tool = 'text'
+
+export type HistoryEntry = {
+  id: string
+  label: string
+  at: number
 }
 
-function parseBlocksFromText(raw: string): CellBlock[] {
-  const trimmed = raw ?? ''
+export type CanvasHistorySource = 'user' | 'system'
 
-  // 先做一个非常保守的最小解析：
-  // - $$...$$ => display latex block
-  // - 其他全部作为 text block
-  const blocks: CellBlock[] = []
-
-  const latexRe = /\$\$([\s\S]*?)\$\$/g
-  let lastIndex = 0
-  let m: RegExpExecArray | null
-
-  while ((m = latexRe.exec(trimmed))) {
-    const start = m.index
-    const end = latexRe.lastIndex
-    const before = trimmed.slice(lastIndex, start)
-    if (before.trim().length > 0) {
-      blocks.push({ id: crypto.randomUUID(), type: 'text', text: before } satisfies TextBlock)
-    }
-    const latex = (m[1] ?? '').trim()
-    blocks.push({ id: crypto.randomUUID(), type: 'latex', latex, displayMode: true } satisfies LatexBlock)
-    lastIndex = end
-  }
-
-  const rest = trimmed.slice(lastIndex)
-  if (rest.trim().length > 0 || blocks.length === 0) {
-    blocks.push({ id: crypto.randomUUID(), type: 'text', text: rest } satisfies TextBlock)
-  }
-
-  return blocks
-}
-
-function renderBlocksToHtml(blocks: CellBlock[], opts: { findCellContent: (id: string) => string | null }) {
-  const parts: string[] = []
-
-  for (const b of blocks) {
-    if (b.type === 'text') {
-      parts.push(`<div class="cell-block-text">${escapeHtml(b.text)}</div>`)
-      continue
-    }
-
-    if (b.type === 'latex') {
-      try {
-        const html = katex.renderToString(b.latex, {
-          throwOnError: false,
-          displayMode: b.displayMode ?? true,
-          output: 'html',
-        })
-        parts.push(`<div class="cell-block-latex">${html}</div>`)
-      } catch {
-        parts.push(`<div class="cell-block-error">LaTeX 渲染失败</div>`)
-      }
-      continue
-    }
-
-    if (b.type === 'cellRef') {
-      const txt = opts.findCellContent(b.targetCellId) ?? '(missing)'
-      parts.push(`<div class="cell-block-ref">↪ 引用 ${escapeHtml(b.targetCellId)}: ${escapeHtml(txt.slice(0, 60))}</div>`)
-      continue
-    }
-  }
-
-  return parts.join('')
-}
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n))
-}
-
-function resizeCanvasToDisplaySize(canvas: HTMLCanvasElement) {
-  const rect = canvas.getBoundingClientRect()
-  const dpr = window.devicePixelRatio || 1
-  const nextWidth = Math.max(1, Math.floor(rect.width * dpr))
-  const nextHeight = Math.max(1, Math.floor(rect.height * dpr))
-  if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
-    canvas.width = nextWidth
-    canvas.height = nextHeight
-    return true
-  }
-  return false
-}
-
-type Camera = {
-  x: number
-  y: number
-  zoom: number
+export type CanvasBoardProps = {
+  tool: Tool
+  color: string
+  onHistoryPush: (entry: HistoryEntry, source?: CanvasHistorySource) => void
+  requestClearToken: number
 }
 
 type Stroke = {
@@ -109,45 +55,6 @@ type FormulaItem = {
   y: number
   color: string
   fontSize: number
-}
-
-// --- Cell（单元框）骨架 ---
-// 已在 ./cellTypes.ts 定义，这里不重复声明，避免类型冲突
-
-function worldToScreen(world: { x: number; y: number }, cam: Camera) {
-  return { x: (world.x - cam.x) * cam.zoom, y: (world.y - cam.y) * cam.zoom }
-}
-
-// (worldToScreen currently unused; keep only screenToWorld for drawing input)
-
-function screenToWorld(screen: { x: number; y: number }, cam: Camera) {
-  return { x: screen.x / cam.zoom + cam.x, y: screen.y / cam.zoom + cam.y }
-}
-
-function getCanvasScreenPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
-  const rect = canvas.getBoundingClientRect()
-  const xCss = clientX - rect.left
-  const yCss = clientY - rect.top
-  const sx = (xCss / rect.width) * canvas.width
-  const sy = (yCss / rect.height) * canvas.height
-  return { x: sx, y: sy }
-}
-
-export type Tool = 'text'
-
-export type HistoryEntry = {
-  id: string
-  label: string
-  at: number
-}
-
-export type CanvasHistorySource = 'user' | 'system'
-
-export type CanvasBoardProps = {
-  tool: Tool
-  color: string
-  onHistoryPush: (entry: HistoryEntry, source?: CanvasHistorySource) => void
-  requestClearToken: number
 }
 
 export default function CanvasBoard(props: CanvasBoardProps) {
@@ -196,144 +103,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         parentWorld: { x: number; y: number }
       }
   >(null)
-
-  const findCellById = useCallback((list: CellNode[], id: string): CellNode | null => {
-    for (const c of list) {
-      if (c.id === id) return c
-      const hit = findCellById(c.children, id)
-      if (hit) return hit
-    }
-    return null
-  }, [])
-
-  const updateCellById = useCallback((list: CellNode[], id: string, updater: (c: CellNode) => CellNode): CellNode[] => {
-    return list.map((c) => {
-      if (c.id === id) return updater(c)
-      if (c.children.length === 0) return c
-      return { ...c, children: updateCellById(c.children, id, updater) }
-    })
-  }, [])
-
-  const removeCellById = useCallback(
-    (list: CellNode[], id: string): { next: CellNode[]; removed: CellNode | null } => {
-      let removed: CellNode | null = null
-
-      const next = list
-        .map((c) => {
-          if (c.id === id) {
-            removed = c
-            return null
-          }
-          if (c.children.length === 0) return c
-          const r = removeCellById(c.children, id)
-          if (r.removed) removed = r.removed
-          return { ...c, children: r.next }
-        })
-        .filter((x): x is CellNode => x != null)
-
-      return { next, removed }
-    },
-    [],
-  )
-
-  const addChildToParent = useCallback(
-    (list: CellNode[], parentId: string, child: CellNode): CellNode[] => {
-      return updateCellById(list, parentId, (p) => ({ ...p, children: [...p.children, child] }))
-    },
-    [updateCellById],
-  )
-
-  type CellWorldHit = {
-    id: string
-    parentId: string | null
-    depth: number
-    world: { x: number; y: number }
-    rect: { x: number; y: number; w: number; h: number }
-  }
-
-  const collectCellWorldHits = useCallback((list: CellNode[]) => {
-    const hits: CellWorldHit[] = []
-
-    const walk = (node: CellNode, parentWorld: { x: number; y: number }, depth: number) => {
-      // 折叠 group：不展开 children
-      const world = { x: parentWorld.x + node.localPos.x, y: parentWorld.y + node.localPos.y }
-      hits.push({
-        id: node.id,
-        parentId: node.parentId,
-        depth,
-        world,
-        rect: { x: world.x, y: world.y, w: node.size.w, h: node.size.h },
-      })
-
-      if (node.kind === 'group' && node.collapsed) return
-      for (const ch of node.children) walk(ch, world, depth + 1)
-    }
-
-    for (const root of list) walk(root, { x: 0, y: 0 }, 0)
-    return hits
-  }, [])
-
-  const pickDropParentId = useCallback(
-    (args: { cellsList: CellNode[]; draggedId: string; pointerWorld: { x: number; y: number } }) => {
-      const { cellsList, draggedId, pointerWorld } = args
-      const hits = collectCellWorldHits(cellsList)
-
-      // 不能 drop 到自己/自己的子树：先取 dragged 的 subtree ids
-      const idToNode = new Map<string, CellNode>()
-      const buildIndex = (nodes: CellNode[]) => {
-        for (const n of nodes) {
-          idToNode.set(n.id, n)
-          buildIndex(n.children)
-        }
-      }
-      buildIndex(cellsList)
-
-      const banned = new Set<string>()
-      const mark = (id: string) => {
-        banned.add(id)
-        const n = idToNode.get(id)
-        if (!n) return
-        for (const ch of n.children) mark(ch.id)
-      }
-      mark(draggedId)
-
-      const inside = (r: { x: number; y: number; w: number; h: number }) => {
-        return (
-          pointerWorld.x >= r.x &&
-          pointerWorld.x <= r.x + r.w &&
-          pointerWorld.y >= r.y &&
-          pointerWorld.y <= r.y + r.h
-        )
-      }
-
-      // 候选：命中 rect，且不在 banned 中
-      const candidates = hits
-        .filter((h) => !banned.has(h.id) && inside(h.rect))
-        // 选最深的（最里层）
-        .sort((a, b) => b.depth - a.depth)
-
-      // 没有命中则返回 null（变为根节点）
-      return candidates[0]?.id ?? null
-    },
-    [collectCellWorldHits],
-  )
-
-  // worldPos 缓存：只在嵌套关系变化时重算
-  const recomputeWorldForSubtree = useCallback(
-    (node: CellNode, parentWorld: { x: number; y: number }): CellNode => {
-      const worldPos = { x: parentWorld.x + node.localPos.x, y: parentWorld.y + node.localPos.y }
-      return {
-        ...node,
-        worldPos,
-        children: node.children.map((ch) => recomputeWorldForSubtree(ch, worldPos)),
-      }
-    },
-    [],
-  )
-
-  const recomputeWorldAll = useCallback((list: CellNode[]) => {
-    return list.map((c) => recomputeWorldForSubtree(c, { x: 0, y: 0 }))
-  }, [recomputeWorldForSubtree])
 
   const rafRef = useRef<number | null>(null)
   const scheduleRender = useCallback(() => {
@@ -654,69 +423,23 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const ensureEdge = useCallback((from: CellId, to: CellId, fromPort?: PortSide, toPort?: PortSide) => {
     if (from === to) return
     setEdges((prev) => {
-      const exists = prev.some(
-        (e) =>
-          (e.from === from && e.to === to && e.fromPort === fromPort && e.toPort === toPort) ||
-          (e.from === to && e.to === from && e.fromPort === toPort && e.toPort === fromPort),
-      )
-      if (exists) return prev
-      return [...prev, { id: crypto.randomUUID(), from, to, fromPort, toPort }]
+      const next = ensureEdgeUnique(prev, { from, to, fromPort, toPort })
+      return next.map((e) => ('id' in e ? (e as CanvasEdge) : ({ ...e, id: crypto.randomUUID() } satisfies CanvasEdge)))
     })
   }, [])
 
   const getPortWorld = useCallback(
     (cellId: CellId, port: PortSide, hits: ReturnType<typeof collectCellWorldHits>): { x: number; y: number } | null => {
-      const hit = hits.find((h) => h.id === cellId)
-      const n = findCellById(cells, cellId)
-      if (!n || !hit) return null
-
-      const margin = 10
-      const x0 = hit.world.x
-      const y0 = hit.world.y
-      const w = n.size.w
-      const h = n.size.h
-
-      if (port === 'n') return { x: x0 + w / 2, y: y0 + margin }
-      if (port === 's') return { x: x0 + w / 2, y: y0 + h - margin }
-      if (port === 'w') return { x: x0 + margin, y: y0 + h / 2 }
-      return { x: x0 + w - margin, y: y0 + h / 2 }
+      return getPortWorldDomain({ cells, hits, cellId, port })
     },
-    [cells, findCellById],
+    [cells],
   )
 
   const pickNearestPort = useCallback(
     (pointerWorld: { x: number; y: number }): { cellId: CellId; port: PortSide } | null => {
-      const hits = collectCellWorldHits(cells)
-      const ports: PortSide[] = ['n', 'e', 's', 'w']
-      let best: { cellId: CellId; port: PortSide; dist2: number } | null = null
-
-      for (const h of hits) {
-        const n = findCellById(cells, h.id)
-        if (!n) continue
-
-        const pad = 24
-        const inPad =
-          pointerWorld.x >= h.rect.x - pad &&
-          pointerWorld.x <= h.rect.x + h.rect.w + pad &&
-          pointerWorld.y >= h.rect.y - pad &&
-          pointerWorld.y <= h.rect.y + h.rect.h + pad
-        if (!inPad) continue
-
-        for (const p of ports) {
-          const pw = getPortWorld(h.id, p, hits)
-          if (!pw) continue
-          const dx = pw.x - pointerWorld.x
-          const dy = pw.y - pointerWorld.y
-          const d2 = dx * dx + dy * dy
-          if (best == null || d2 < best.dist2) best = { cellId: h.id, port: p, dist2: d2 }
-        }
-      }
-
-      const snapDist = 26
-      if (!best || best.dist2 > snapDist * snapDist) return null
-      return { cellId: best.cellId, port: best.port }
+      return pickNearestPortDomain({ cells, pointerWorld })
     },
-    [cells, collectCellWorldHits, findCellById, getPortWorld],
+    [cells],
   )
 
   // L：切换连线模式；Esc：退出连线模式并清空起点
@@ -1150,101 +873,22 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           onWheel={handleWheel}
         />
 
-        {/* 连线层（SVG） */}
-        <svg className="edge-layer" width="100%" height="100%">
-          {(() => {
-            const cam = cameraRef.current
-            const canvas = canvasRef.current
-            const wrap = wrapRef.current
-            if (!canvas || !wrap) return null
-
-            const rect = wrap.getBoundingClientRect()
-            const hits = collectCellWorldHits(cells)
-
-            const worldToCss = (world: { x: number; y: number }) => {
-              const screenPx = worldToScreen(world, cam)
-              return {
-                x: (screenPx.x / canvas.width) * rect.width,
-                y: (screenPx.y / canvas.height) * rect.height,
-              }
-            }
-
-            const portOrCenter = (cellId: CellId, port: PortSide | undefined) => {
-              const n = findCellById(cells, cellId)
-              const hit = hits.find((h) => h.id === cellId)
-              if (!n || !hit) return null
-
-              if (port) {
-                const pw = getPortWorld(cellId, port, hits)
-                if (!pw) return null
-                return pw
-              }
-              return { x: hit.world.x + n.size.w / 2, y: hit.world.y + n.size.h / 2 }
-            }
-
-            const makeCurveD = (aCss: { x: number; y: number }, bCss: { x: number; y: number }) => {
-              const dx = bCss.x - aCss.x
-              const dy = bCss.y - aCss.y
-              const c1 = { x: aCss.x + dx * 0.25, y: aCss.y + dy * 0.0 }
-              const c2 = { x: aCss.x + dx * 0.75, y: aCss.y + dy * 1.0 }
-              return `M ${aCss.x} ${aCss.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${bCss.x} ${bCss.y}`
-            }
-
-            const selectedId = selectedEdgeId
-
-            const edgePaths = edges
-              .map((e) => {
-                const aW = portOrCenter(e.from, e.fromPort)
-                const bW = portOrCenter(e.to, e.toPort)
-                if (!aW || !bW) return null
-                const a = worldToCss(aW)
-                const b = worldToCss(bW)
-                const d = makeCurveD(a, b)
-                const isSelected = selectedId === e.id
-                return (
-                  <path
-                    key={e.id}
-                    d={d}
-                    className={`edge-path${isSelected ? ' is-selected' : ''}`}
-                    onPointerDown={(ev) => {
-                      // 允许选中边（edge-layer pointer-events 需在 CSS 里打开）
-                      ev.preventDefault()
-                      ev.stopPropagation()
-                      setSelectedEdgeId(e.id)
-                      setSelectedCellId(null)
-                      setSelectedFormulaId(null)
-                      scheduleRender()
-                    }}
-                  />
-                )
-              })
-              .filter(Boolean)
-
-            // 预览连线（拖拽中）
-            const preview = (() => {
-              const d = draggingEdgeRef.current
-              if (!d) return null
-
-              const aW = getPortWorld(d.fromId, d.fromPort, hits)
-              if (!aW) return null
-
-              const bW = d.toId && d.toPort ? getPortWorld(d.toId, d.toPort, hits) : d.pointerWorld
-              if (!bW) return null
-
-              const a = worldToCss(aW)
-              const b = worldToCss(bW)
-              const dd = makeCurveD(a, b)
-              return <path d={dd} className="edge-path edge-path-preview" />
-            })()
-
-            return (
-              <>
-                {edgePaths}
-                {preview}
-              </>
-            )
-          })()}
-        </svg>
+        <EdgeLayer
+          edges={edges}
+          selectedEdgeId={selectedEdgeId}
+          draggingEdge={draggingEdgeRef.current}
+          cells={cells}
+          camera={cameraRef.current}
+          canvasEl={canvasRef.current}
+          wrapEl={wrapRef.current}
+          getPortWorld={getPortWorld}
+          onSelectEdge={(edgeId) => {
+            setSelectedEdgeId(edgeId)
+            setSelectedCellId(null)
+            setSelectedFormulaId(null)
+            scheduleRender()
+          }}
+        />
 
         {renderLinkModeHint()}
 
@@ -1542,69 +1186,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           })()}
         </div>
 
-        <div className="formula-layer" data-tick={renderTick}>
-          {(() => {
-            const cam = cameraRef.current
-            const canvas = canvasRef.current
-            const wrap = wrapRef.current
-            if (!canvas || !wrap) return null
-
-            const rect = wrap.getBoundingClientRect()
-
-            return formulas.map((f: FormulaItem) => {
-              const screenPx = worldToScreen({ x: f.x, y: f.y }, cam)
-              const xCss = (screenPx.x / canvas.width) * rect.width
-              const yCss = (screenPx.y / canvas.height) * rect.height
-
-              let html = ''
-              try {
-                html = katex.renderToString(f.latex, {
-                  throwOnError: false,
-                  displayMode: true,
-                  output: 'html',
-                })
-              } catch {
-                html = `<span style="color:#c00">LaTeX 渲染失败</span>`
-              }
-
-              const isSelected = selectedFormulaId === f.id
-
-              return (
-                <div
-                  key={f.id}
-                  className={`formula-item${isSelected ? ' is-selected' : ''}`}
-                  style={{ left: xCss, top: yCss, color: f.color, fontSize: f.fontSize }}
-                  onPointerDown={(ev) => {
-                    // 让公式可交互：阻止事件冒泡到 canvas
-                    ev.preventDefault()
-                    ev.stopPropagation()
-
-                    const canvasEl = canvasRef.current
-                    if (!canvasEl) return
-
-                    setSelectedFormulaId(f.id)
-
-                    // 左键开始拖拽
-                    if (ev.button !== 0) return
-
-                    canvasEl.setPointerCapture(ev.pointerId)
-
-                    const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
-                    const world = screenToWorld(screen, cameraRef.current)
-
-                    draggingFormulaRef.current = {
-                      id: f.id,
-                      pointerId: ev.pointerId,
-                      startWorld: world,
-                      startFormula: { x: f.x, y: f.y },
-                    }
-                  }}
-                  dangerouslySetInnerHTML={{ __html: html }}
-                />
-              )
-            })
-          })()}
-        </div>
+        <FormulaLayer
+          formulas={formulas}
+          selectedFormulaId={selectedFormulaId}
+          camera={cameraRef.current}
+          canvasEl={canvasRef.current}
+          wrapEl={wrapRef.current}
+          onSelectFormula={(id) => setSelectedFormulaId(id)}
+          onStartDrag={(d) => {
+            draggingFormulaRef.current = d
+          }}
+        />
 
         {editor && (
           <div
