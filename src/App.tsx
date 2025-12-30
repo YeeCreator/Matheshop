@@ -1,9 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CanvasBoard, { type CanvasHistorySource, type HistoryEntry, type Tool } from './components/CanvasBoard'
+import InspectorPanel from './components/InspectorPanel'
 import './App.css'
 
 const TOOL_LABELS: Record<Tool, string> = {
   text: '文本/公式',
+}
+
+type InspectorSnapshot = {
+  activeInlineEditor: {
+    cellId: string
+    selection: { kind: 'tokenRange'; start: number; end: number }
+    draft: string
+    anchorCss: { left: number; top: number }
+  } | null
+  selectedExprToken: { cellId: string; tokenId: string } | null
 }
 
 function App() {
@@ -23,6 +34,30 @@ function App() {
   }
 
   const toolItems: Tool[] = ['text']
+
+  const [inspector, setInspector] = useState<InspectorSnapshot>({ activeInlineEditor: null, selectedExprToken: null })
+
+  useEffect(() => {
+    const onInspector = (ev: Event) => {
+      const ce = ev as CustomEvent
+      if (!ce.detail) return
+      setInspector(ce.detail as InspectorSnapshot)
+    }
+    window.addEventListener('matheshop:inspector', onInspector as EventListener)
+    return () => window.removeEventListener('matheshop:inspector', onInspector as EventListener)
+  }, [])
+
+  const requestApply = () => {
+    window.dispatchEvent(new CustomEvent('matheshop:inspector:apply'))
+  }
+
+  const requestCancel = () => {
+    window.dispatchEvent(new CustomEvent('matheshop:inspector:cancel'))
+  }
+
+  const requestDraftChange = (draft: string) => {
+    window.dispatchEvent(new CustomEvent('matheshop:inspector:draft', { detail: { draft } }))
+  }
 
   return (
     <div className="container">
@@ -64,6 +99,22 @@ function App() {
       </div>
 
       <div className="sidebar right-sidebar">
+        <InspectorPanel
+          active={
+            inspector.activeInlineEditor
+              ? {
+                  cellId: inspector.activeInlineEditor.cellId,
+                  selection: inspector.activeInlineEditor.selection,
+                  draft: inspector.activeInlineEditor.draft,
+                }
+              : null
+          }
+          tokens={null}
+          onChangeDraft={requestDraftChange}
+          onApply={requestApply}
+          onCancel={requestCancel}
+        />
+
         <div className="panel">
           <h3>图层</h3>
           <ul className="layer-list">

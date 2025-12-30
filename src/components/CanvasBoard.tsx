@@ -3,6 +3,9 @@ import katex from 'katex'
 import type { CanvasEdge, CellId, CellNode, PortSide } from './cellTypes'
 import EdgeLayer from './canvas/EdgeLayer'
 import FormulaLayer from './canvas/FormulaLayer'
+import ExprTokenView from './canvas/ExprTokenView'
+import InlineExprEditor from './canvas/InlineExprEditor'
+import { parseArithExpr } from '../symbolic/arithParser'
 import { evalWithPythonEngine } from '../symbolic/pythonEngineClient'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
@@ -23,6 +26,7 @@ import {
   worldToScreen,
 } from './canvas/utils/geometry'
 import { parseBlocksFromText, renderBlocksToHtml } from './canvas/utils/blocks'
+import { normalizeRange, type InlineSelection } from './canvas/exprSelection'
 
 export type Tool = 'text'
 
@@ -339,6 +343,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const selectionStartRef = useRef<null | { x: number; y: number }> (null)
   const isBoxSelectingRef = useRef(false)
 
+  // 单元内“隐式表达式节点”选中态（MVP：按 token 粒度）
+  const [selectedExprToken, setSelectedExprToken] = useState<null | { cellId: string; tokenId: string }>(null)
+
+  // M2：局部编辑（tokenRange 级别，MVP）
+  const [activeInlineEditor, setActiveInlineEditor] = useState<null | {
+    cellId: string
+    selection: InlineSelection
+    draft: string
+    anchorCss: { left: number; top: number }
+  }>(null)
+
   // 框选辅助函数
   function getBoxRect(a: { x: number; y: number }, b: { x: number; y: number }) {
     return {
@@ -500,6 +515,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       setSelectedFormulaId(null)
       setSelectedCellId(null)
       setSelectedEdgeId(null)
+      setSelectedExprToken(null)
     }
 
     // 左键点击插入：创建一个根 Cell（worldPos/localPos 同值），便于你看到 Notebook 风格骨架
@@ -929,6 +945,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                 findCellContent: (id) => findCellContent(id),
               })
 
+              // 尝试将单元内容当作算术表达式解析为 token（失败则沿用 blocks 展示）
+              let arithTokens: ReturnType<typeof parseArithExpr>['tokens'] | null = null
+              try {
+                arithTokens = parseArithExpr(c.content).tokens
+              } catch {
+                arithTokens = null
+              }
+
+              // console.log(c.id, { arithTokens, blocks })
+
               const renderPorts = () => {
                 const ports: Array<{ port: PortSide; x: number; y: number }> = [
                   { port: 'n', x: c.size.w / 2, y: 8 },
@@ -1186,9 +1212,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                               setCells((prev) =>
                                 updateCellById(prev, c.id, (next) => {
                                   const base = next.blocks && next.blocks.length > 0 ? next.blocks : parseBlocksFromText(next.content)
-                                  const line = resp.ok
-                                    ? `= ${resp.result.value}`
-                                    : `⚠ ${resp.error.message}`
+                                  const line = resp.ok ? `= ${resp.result.value}` : `⚠ ${resp.error.message}`
                                   return {
                                     ...next,
                                     blocks: [...base, { id: crypto.randomUUID(), type: 'text', text: line }],
@@ -1201,6 +1225,83 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                           }
                         }}
                       />
+                    ) : arithTokens ? (
+                      <>
+                        <ExprTokenView
+                          tokens={arithTokens}
+                          selectedTokenId={selectedExprToken?.cellId === c.id ? selectedExprToken.tokenId : null}
+                          onSelectToken={({ tokenId, tokenIndex, anchorRect }) => {
+                            setSelectedExprToken({ cellId: c.id, tokenId })
+
+                            const wrap = wrapRef.current
+                            const wrapRect = wrap?.getBoundingClientRect()
+                            const left = wrapRect ? anchorRect.left - wrapRect.left : anchorRect.left
+                            const top = wrapRect ? anchorRect.bottom - wrapRect.top + 6 : anchorRect.bottom + 6
+
+                            setActiveInlineEditor((prev) => {
+                              const draft = prev?.cellId === c.id ? prev.draft : arithTokens[tokenIndex]?.text ?? ''
+                              return {
+                                cellId: c.id,
+                                selection: { kind: 'tokenRange', start: tokenIndex, end: tokenIndex },
+                                draft,
+                                anchorCss: { left, top },
+                              }
+                            })
+                          }}
+                          onDeselect={() => {
+                            if (selectedExprToken?.cellId === c.id) setSelectedExprToken(null)
+                            if (activeInlineEditor?.cellId === c.id) setActiveInlineEditor(null)
+                          }}
+                          onRequestEdit={({ tokenIndex, anchorRect }) => {
+                            const wrap = wrapRef.current
+                            const wrapRect = wrap?.getBoundingClientRect()
+                            const left = wrapRect ? anchorRect.left - wrapRect.left : anchorRect.left
+                            const top = wrapRect ? anchorRect.bottom - wrapRect.top + 6 : anchorRect.bottom + 6
+
+                            setActiveInlineEditor({
+                              cellId: c.id,
+                              selection: { kind: 'tokenRange', start: tokenIndex, end: tokenIndex },
+                              draft: arithTokens[tokenIndex]?.text ?? '',
+                              anchorCss: { left, top },
+                            })
+                          }}
+                        />
+
+                        {activeInlineEditor?.cellId === c.id && (
+                          <InlineExprEditor
+                            anchorCss={activeInlineEditor.anchorCss}
+                            draft={activeInlineEditor.draft}
+                            onChangeDraft={(v) => setActiveInlineEditor((prev) => (prev ? { ...prev, draft: v } : prev))}
+                            onApply={() => {
+                              if (!activeInlineEditor) return
+                              if (activeInlineEditor.cellId !== c.id) return
+
+                              const sel = activeInlineEditor.selection
+                              if (sel.kind !== 'tokenRange') return
+                              const { start, end } = normalizeRange(sel.start, sel.end)
+
+                              const before = arithTokens.slice(0, start).map((t) => t.text).join('')
+                              const after = arithTokens.slice(end + 1).map((t) => t.text).join('')
+                              const nextContent = `${before}${activeInlineEditor.draft}${after}`
+
+                              setCells((prev) =>
+                                updateCellById(prev, c.id, (next) => ({
+                                  ...next,
+                                  content: nextContent,
+                                  blocks: parseBlocksFromText(nextContent),
+                                })),
+                              )
+
+                              onHistoryPush({ id: crypto.randomUUID(), label: '局部编辑表达式', at: Date.now() }, 'user')
+                              setActiveInlineEditor(null)
+                              scheduleRender()
+                            }}
+                            onCancel={() => {
+                              if (activeInlineEditor?.cellId === c.id) setActiveInlineEditor(null)
+                            }}
+                          />
+                        )}
+                      </>
                     ) : (
                       <div className="cell-blocks" dangerouslySetInnerHTML={{ __html: htmlContent }} />
                     )}

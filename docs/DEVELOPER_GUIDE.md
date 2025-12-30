@@ -130,6 +130,67 @@ Invoke-RestMethod http://127.0.0.1:5173/api/engine/health
 - 默认走 `/api/engine/v1/eval`（开发推荐）
 - 如需直连后端（例如生产环境/非代理），可设置 `VITE_ENGINE_BASE_URL`（例如 `http://127.0.0.1:8000`）
 
+## 2.7 单元内符号计算（隐式表达式节点，MVP）
+
+当前阶段实现了“单元框内表达式的隐式节点渲染（token 级别）”，用于后续的符号计算与子树编辑。
+
+- 入口组件：`src/components/canvas/ExprTokenView.tsx`
+- 解析器：`src/symbolic/arithParser.ts`
+- AST/Token 类型：`src/symbolic/arithAst.ts`
+
+### 2.7.1 当前支持的语法（MVP）
+
+- 数字：整数/小数（如 `12` / `3.14`）
+- 运算符：`+ - * / ^`
+- 括号：`(` `)`
+- 单目负号：如 `-3`、`-(1+2)`
+
+解析失败时，单元框会自动回退到原有的 blocks/HTML 渲染。
+
+### 2.7.2 交互（MVP）
+
+- 单击 token：选中（高亮）该隐式节点。
+- 双击 cell：仍可进入整块编辑（textarea）。
+- Ctrl/⌘ + Enter：提交并调用 Python 引擎求值（结果追加显示为 `= ...`）。
+
+### 2.7.3 下一步（建议）
+
+- 将 token 与 AST 节点建立映射（子树级别选中，而非 token 级别）。
+- 支持双击 token 进入“局部编辑框”，提交后替换 AST 子树。
+- 将求值输出与原内容分离（例如 `cell.output`），避免 blocks 持续增长。
+
+### 2.7.4 M2：局部编辑框（就地 + Inspector，MVP）
+
+当前实现提供两种入口，它们共享同一份编辑草稿（draft）：
+
+1. **就地编辑框**：在 cell 内双击某个 token，弹出一个小输入框覆盖在该 token 附近。
+2. **右侧 Inspector**：右侧栏会显示当前选中的 cellId/选区，并可编辑同一份 draft。
+
+#### 数据流（简化，MVP）
+
+- `ExprTokenView` 会回传 `tokenIndex + anchorRect`。
+- `CanvasBoard` 把局部编辑状态保存在 `activeInlineEditor`（包含 `cellId/selection/draft/anchorCss`）。
+- 为了避免引入全局状态管理（Redux/Zustand），`CanvasBoard` 会通过 `window.dispatchEvent(CustomEvent)` 将状态广播给 `App`：
+  - `matheshop:inspector`（payload：当前 activeInlineEditor/selected token）
+- `InspectorPanel` 通过事件回调把修改与动作发送回 `CanvasBoard`：
+  - `matheshop:inspector:draft`（更新 draft）
+  - `matheshop:inspector:apply`（应用修改）
+  - `matheshop:inspector:cancel`（取消）
+
+#### 应用策略（MVP）
+
+M2 目前采用 **tokenRange 文本替换**：
+
+- 取被选区前面的 tokens 拼接为 `before`
+- 取被选区后面的 tokens 拼接为 `after`
+- 新内容：`before + draft + after`
+
+然后写回：
+- `cell.content = nextContent`
+- `cell.blocks = parseBlocksFromText(nextContent)`
+
+> 后续升级到“AST 子树替换”后，会在必要时自动补括号，避免优先级问题。
+
 ## 3. 目录结构与职责边界
 
 ```
