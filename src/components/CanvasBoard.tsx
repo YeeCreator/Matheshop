@@ -1015,6 +1015,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   className={`cell${isSelected ? ' is-selected' : ''}${isDropHint ? ' is-drop-hint' : ''}`}
                   style={{ left: xCss, top: yCss, width: c.size.w, height: c.size.h }}
                   onPointerDown={(ev) => {
+                    const t = ev.target as HTMLElement | null
+                    const tag = t?.tagName?.toLowerCase()
+                    const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
+
+                    // 允许在输入控件内正常获取焦点/输入
+                    if (tag === 'textarea' || tag === 'input' || isEditable) {
+                      ev.stopPropagation()
+                      return
+                    }
+
                     ev.preventDefault()
                     ev.stopPropagation()
 
