@@ -1,54 +1,85 @@
-# React + TypeScript + Vite
+# Matheshop
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个基于 **Vite + React + TypeScript** 的轻量“数学白板/Canvas”原型：在画布上创建可编辑的单元框（Cell）、渲染 KaTeX 公式、并在单元框之间连线。
 
-Currently, two official plugins are available:
+> 目前定位：原型/实验项目，重点在交互与组件拆分（`CanvasBoard` 正在持续重构）。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 功能概览
 
-## Expanding the ESLint configuration
+- **画布相机（Camera）**：滚轮缩放、平移
+- **单元框（Cell）**
+  - 单击选中、拖拽移动
+  - 双击进入编辑（文本域）
+  - 支持嵌套（把一个 cell 拖到另一个 cell 上松开）
+  - 支持 Group（可折叠容器）基础形态
+- **公式（Formula）**：使用 **KaTeX** 渲染，可选中、可拖拽
+- **连线（Edge）**：支持进入连线模式后连接 cell
+- **框选（多选）**：拖拽框选选中多个 cell（当前实现以现状为准）
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 快捷键 / 交互手势
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- 滚轮：缩放
+- Shift + 滚轮：横向平移
+- 中键拖拽：平移
+- 空格按住 + 左键拖拽：平移
+
+- 双击 Cell：进入编辑
+- 编辑时：
+  - Esc：退出编辑
+  - Ctrl/⌘ + Enter：提交内容并解析 blocks（如 `$$...$$`）
+
+- L：进入/退出连线模式
+- Esc：取消当前交互（取消拖拽/选择/连线起点等）
+- Delete/Backspace：删除选中的边或节点（输入框内不会拦截）
+
+## 本地开发
+
+本项目使用 `pnpm`。
+
+```powershell
+pnpm install
+pnpm dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+启动后按终端输出打开本地地址（一般为 http://localhost:5173）。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 构建与预览
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+```powershell
+pnpm build
+pnpm preview
 ```
+
+## 代码结构（速览）
+
+- `src/App.tsx`：应用壳（工具栏/历史记录/颜色选择等），渲染 `CanvasBoard`
+- `src/components/CanvasBoard.tsx`：核心交互层（状态机、事件处理、组合各层）
+- `src/components/cellTypes.ts`：领域类型（Cell/Edge/Port/Blocks 等）
+
+Canvas 拆分目录：`src/components/canvas/`
+
+- `EdgeLayer.tsx`：SVG 连线层（渲染与选中）
+- `FormulaLayer.tsx`：KaTeX 公式层（渲染与拖拽开始）
+- `utils/`
+  - `geometry.ts`：相机/坐标变换/Canvas 尺寸工具
+  - `blocks.ts`：cell 内容解析与 KaTeX HTML 渲染
+- `domain/`
+  - `cellTree.ts`：Cell 树操作（查找/更新/删除/命中测试/重算 worldPos）
+  - `edges.ts`：Edge 相关规则（去重、端口吸附等）
+
+> 更完整的“开发者手册/架构说明”请看：`docs/DEVELOPER_GUIDE.md`。
+
+## 常见问题（FAQ）
+
+### 1. Windows 下命令行怎么跑？
+本文档给的命令均为 PowerShell 版本（使用 `;` 串联命令）。
+
+### 2. 为什么用 `pnpm`？
+项目当前使用 `pnpm-lock.yaml`，建议统一用 `pnpm` 以避免锁文件漂移。
+
+### 3. KaTeX 字体/样式在哪里？
+KaTeX 相关资源由构建产物打包输出（可在 `dist/assets/` 看到字体文件）。
+
+## License
+
+暂未声明（如需开源许可证，可补充 MIT/Apache-2.0 等）。
