@@ -1,5 +1,6 @@
 import { evalWithPythonEngine, type PythonEngineEvalResponse } from './pythonEngineClient'
 import type { EngineChoice } from './engineSelection'
+import { evalWithNativeEngine } from './nativeEngine'
 
 export type EngineEvalOk = {
   ok: true
@@ -21,6 +22,10 @@ export async function evalExpression(args: {
 }): Promise<EngineEvalResponse> {
   const { text, engine } = args
 
+  if (engine.choice === 'builtin_native') {
+    return evalWithNativeEngine({ text })
+  }
+
   if (engine.choice === 'builtin_python') {
     const r: PythonEngineEvalResponse = await evalWithPythonEngine({ text })
     return r.ok
@@ -37,10 +42,6 @@ export async function evalExpression(args: {
     }
   }
 
-  // builtin_native：先占位（后续会接 TS 引擎 / 本地求值）
-  return {
-    ok: false,
-    error: { code: 'not_implemented', message: '内置原生计算引擎：暂未接入（待实现 TS 引擎）' },
-    meta: { engine: 'builtin_native' },
-  }
+  // should be unreachable
+  return { ok: false, error: { code: 'bad_engine_choice', message: '未知引擎选项' } }
 }
