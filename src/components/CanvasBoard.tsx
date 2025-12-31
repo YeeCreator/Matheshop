@@ -10,11 +10,8 @@ import { evalExpression } from '../engine/engineClient'
 import type { EngineSelectionState } from '../engine/engineSelection'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
-  addChildToParent,
   collectCellWorldHits,
   findCellById,
-  pickDropParentId,
-  recomputeWorldAll,
   removeCellById,
   updateCellById,
 } from './canvas/domain/cellTree'
@@ -537,7 +534,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
       const world = screenToWorld(screen, cameraRef.current)
       const id = crypto.randomUUID()
-      const content = '(* 在这里输入表达式或多行内容 *)\n1+1\n\n$$\\frac{a}{b}$$'
+      const content = ''
 
       setCells((prev) => {
         // 现在的策略：
@@ -552,7 +549,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           worldPos: { x: world.x, y },
           size: { w: 420, h: 180 },
           kind: 'cell',
-          blocks: parseBlocksFromText(content),
+          blocks: [],
           content,
           children: [],
         }
@@ -645,7 +642,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 拖拽单元框：更新 localPos，并给出 drop hint
+    // 拖拽单元框：更新 localPos（已临时禁用“拖拽嵌套/重父级”能力）
     if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
@@ -661,14 +658,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           localPos: { x: d.startPos.x + dxWorld, y: d.startPos.y + dyWorld },
         }))
 
-        // drop hint（不影响数据结构）
-        // Shift：强制回根
-        const hintId = e.shiftKey ? null : pickDropParentId({ cellsList: next, draggedId: d.id, pointerWorld: world })
-        setDropHintCellId(hintId)
-
+        // 嵌套功能已关闭：不再计算 drop hint
         return next
       })
 
+      if (dropHintCellId != null) setDropHintCellId(null)
       scheduleRender()
       return
     }
@@ -771,60 +765,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 结束拖拽单元框：如果有 drop hint，则执行重嵌套
+    // 结束拖拽单元框：嵌套功能已关闭（仅结束拖拽，不做重嵌套）
     if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId) {
-      const d = draggingCellRef.current
-
       try {
         canvas.releasePointerCapture(e.pointerId)
       } catch {
         // ignore
       }
 
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      const pointerWorld = screenToWorld(screen, cameraRef.current)
-
-      setCells((prev) => {
-        const dropParentId = e.shiftKey ? null : pickDropParentId({ cellsList: prev, draggedId: d.id, pointerWorld })
-
-        // 先拿到 dragged 节点当前 worldNow（用于计算新的 localPos）
-        const hits = collectCellWorldHits(prev)
-        const draggedHit = hits.find((h) => h.id === d.id)
-        if (!draggedHit) return prev
-
-        const oldParentId = draggedHit.parentId
-
-        // 如果目标父节点没变化，不做 tree 变更（只算移动）
-        if (dropParentId === oldParentId) return prev
-
-        // 目标 parentWorld：根为 (0,0)，否则从 hits 找到 parent 的 world
-        const parentWorld = dropParentId ? hits.find((h) => h.id === dropParentId)?.world ?? { x: 0, y: 0 } : { x: 0, y: 0 }
-
-        // 从树中移除 dragged
-        const r = removeCellById(prev, d.id)
-        if (!r.removed) return prev
-
-        const movedNode: CellNode = {
-          ...r.removed,
-          parentId: dropParentId,
-          // 保持当前 world 坐标不变，换算成新 parent 的 local
-          localPos: { x: draggedHit.world.x - parentWorld.x, y: draggedHit.world.y - parentWorld.y },
-        }
-
-        let nextTree = r.next
-        if (dropParentId == null) {
-          nextTree = [...nextTree, movedNode]
-        } else {
-          nextTree = addChildToParent(nextTree, dropParentId, movedNode)
-        }
-
-        // 嵌套关系变化 => 重算 worldPos 缓存
-        return recomputeWorldAll(nextTree)
-      })
-
       draggingCellRef.current = null
-      setDropHintCellId(null)
-      onHistoryPush({ id: crypto.randomUUID(), label: e.shiftKey ? '移到根层' : '重新嵌套单元框', at: Date.now() }, 'user')
+      if (dropHintCellId != null) setDropHintCellId(null)
+      onHistoryPush({ id: crypto.randomUUID(), label: '移动单元框', at: Date.now() }, 'user')
       scheduleRender()
       return
     }
@@ -1148,45 +1099,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      className="cell-add"
-                      onClick={(ev) => {
-                        ev.preventDefault()
-                        ev.stopPropagation()
-
-                        const parentId = c.id
-                        const childId = crypto.randomUUID()
-
-                        const childContent = '(* 子单元框 *)\n2+2'
-                        // 子 cell 用 localPos（相对父内容区），这里先给一个默认偏移
-                        const childLocal = { x: 18 + depth * 6, y: 46 + depth * 6 }
-                        const child: CellNode = {
-                          id: childId,
-                          parentId,
-                          localPos: childLocal,
-                          worldPos: { x: 0, y: 0 },
-                          size: { w: 380, h: 150 },
-                          kind: 'cell',
-                          blocks: parseBlocksFromText(childContent),
-                          content: childContent,
-                          children: [],
-                        }
-
-                        setCells((prev) => {
-                          const next = updateCellById(prev, parentId, (p) => ({ ...p, children: [...p.children, child] }))
-                          return recomputeWorldAll(next)
-                        })
-
-                        setSelectedCellId(childId)
-                        setEditingCellId(childId)
-                        onHistoryPush({ id: crypto.randomUUID(), label: '添加子单元框', at: Date.now() }, 'user')
-                        scheduleRender()
-                      }}
-                      title="添加子单元框"
-                    >
-                      +
-                    </button>
+                    {/* 暂时禁用显式嵌套：仅保留节点连接（Edge）能力 */}
                   </div>
 
                   <div className="cell-body">
@@ -1433,7 +1346,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       </div>
       <div className="small-muted">
         当前模式：文本/公式 ｜ 缩放：{cameraRef.current.zoom.toFixed(2)}x ｜ 平移：中键拖拽 / 空格+拖拽 ｜
-        单元框：单击选中、拖拽移动、双击编辑 ｜ 拖拽嵌套：拖到目标单元框上松开 ｜ Shift+拖拽：强制移到根层 ｜
+        单元框：单击选中、拖拽移动、双击编辑 ｜
         连线：按 L 进入连线模式，点击两个单元框创建连接
       </div>
     </div>
