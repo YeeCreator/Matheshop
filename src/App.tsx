@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import CanvasBoard, { type CanvasHistorySource, type HistoryEntry, type Tool } from './components/CanvasBoard'
 import InspectorPanel from './components/InspectorPanel'
+import SettingsPanel from './components/SettingsPanel'
 import {
   DEFAULT_ENGINE_SELECTION,
   loadEngineSelection,
   saveEngineSelection,
-  type EngineChoice,
   type EngineSelectionState,
 } from './engine/engineSelection'
 import './App.css'
@@ -33,6 +33,19 @@ function App() {
     if (typeof window === 'undefined') return DEFAULT_ENGINE_SELECTION
     return loadEngineSelection()
   })
+
+  const [activeView, setActiveView] = useState<'main' | 'settings'>('main')
+  const settingsButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  const openSettings = () => {
+    setActiveView('settings')
+  }
+
+  const closeSettings = () => {
+    setActiveView('main')
+    // 关闭后把焦点还给齿轮按钮（键盘用户更友好）
+    settingsButtonRef.current?.focus()
+  }
 
   useEffect(() => {
     saveEngineSelection(engineSelection)
@@ -84,121 +97,116 @@ function App() {
 
   return (
     <div className="container">
-      <div className="sidebar left-sidebar">
-        <ul className="tool-list">
-          {toolItems.map((t) => (
-            <li
-              key={t}
-              className="tool-item"
-              onClick={() => setTool(t)}
-              style={{
-                fontWeight: tool === t ? 700 : 400,
-                background: tool === t ? '#e0e0e0' : undefined,
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              {TOOL_LABELS[t]}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <button
+        ref={settingsButtonRef}
+        type="button"
+        className="settings-gear"
+        aria-label="设置"
+        aria-expanded={activeView === 'settings'}
+        onClick={openSettings}
+      >
+        ⚙
+      </button>
 
-      <div className="main-content">
-        <div className="canvas-toolbar">
-          <button type="button" onClick={() => setClearToken((x) => x + 1)}>
-            清空
-          </button>
+      <SettingsPanel
+        open={activeView === 'settings'}
+        onClose={closeSettings}
+        engineSelection={engineSelection}
+        onChangeEngineChoice={(choice) => setEngineSelection((prev) => ({ ...prev, choice }))}
+      />
 
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            文本颜色
-            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-          </label>
+      {activeView === 'settings' ? null : (
+        <>
+          <div className="sidebar left-sidebar">
+            <ul className="tool-list">
+              {toolItems.map((t) => (
+                <li
+                  key={t}
+                  className="tool-item"
+                  onClick={() => setTool(t)}
+                  style={{
+                    fontWeight: tool === t ? 700 : 400,
+                    background: tool === t ? '#e0e0e0' : undefined,
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  {TOOL_LABELS[t]}
+                </li>
+              ))}
+            </ul>
+          </div>
 
-          <span className="small-muted">提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</span>
-        </div>
+          <div className="main-content">
+            <div className="canvas-toolbar">
+              <button type="button" onClick={() => setClearToken((x) => x + 1)}>
+                清空
+              </button>
 
-        <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
-      </div>
-
-      <div className="sidebar right-sidebar">
-        <InspectorPanel
-          active={
-            inspector.activeInlineEditor
-              ? {
-                  cellId: inspector.activeInlineEditor.cellId,
-                  selection: inspector.activeInlineEditor.selection,
-                  draft: inspector.activeInlineEditor.draft,
-                }
-              : null
-          }
-          tokens={null}
-          onChangeDraft={requestDraftChange}
-          onApply={requestApply}
-          onCancel={requestCancel}
-        />
-
-        <div className="panel">
-          <h3>符号计算系统引擎</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {(
-              [
-                { value: 'builtin_native', label: '内置原生计算引擎' },
-                { value: 'builtin_python', label: '内置 Python 计算引擎' },
-                { value: 'external', label: '外接计算引擎' },
-              ] as Array<{ value: EngineChoice; label: string }>
-            ).map((opt) => (
-              <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="radio"
-                  name="matheshop-engine-choice"
-                  value={opt.value}
-                  checked={engineSelection.choice === opt.value}
-                  onChange={() => setEngineSelection((prev) => ({ ...prev, choice: opt.value }))}
-                />
-                {opt.label}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                文本颜色
+                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
               </label>
-            ))}
 
-            <div className="small-muted">
-              默认使用“内置原生计算引擎（TS 本地）”，不需要启动后端；只有选择“内置 Python 计算引擎/外接计算引擎”时才需要后端能力（外接目前仅 UI 占位）。
+              <span className="small-muted">提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</span>
+            </div>
+
+            <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
+          </div>
+
+          <div className="sidebar right-sidebar">
+            <InspectorPanel
+              active={
+                inspector.activeInlineEditor
+                  ? {
+                      cellId: inspector.activeInlineEditor.cellId,
+                      selection: inspector.activeInlineEditor.selection,
+                      draft: inspector.activeInlineEditor.draft,
+                    }
+                  : null
+              }
+              tokens={null}
+              onChangeDraft={requestDraftChange}
+              onApply={requestApply}
+              onCancel={requestCancel}
+            />
+
+
+            <div className="panel">
+              <h3>图层</h3>
+              <ul className="layer-list">
+                {layers.map((l) => (
+                  <li key={l} className="layer-item">
+                    {l}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="panel">
+              <h3>颜色选择器</h3>
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+            </div>
+
+            <div className="panel">
+              <h3>历史记录</h3>
+              <textarea
+                className="history-textbox"
+                readOnly
+                value={
+                  history.length === 0
+                    ? '暂无'
+                    : history
+                        .slice()
+                        .reverse()
+                        .map((h) => h.label)
+                        .join('\n')
+                }
+              />
             </div>
           </div>
-        </div>
-
-        <div className="panel">
-          <h3>图层</h3>
-          <ul className="layer-list">
-            {layers.map((l) => (
-              <li key={l} className="layer-item">
-                {l}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="panel">
-          <h3>颜色选择器</h3>
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-        </div>
-
-        <div className="panel">
-          <h3>历史记录</h3>
-          <textarea
-            className="history-textbox"
-            readOnly
-            value={
-              history.length === 0
-                ? '暂无'
-                : history
-                    .slice()
-                    .reverse()
-                    .map((h) => h.label)
-                    .join('\n')
-            }
-          />
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }

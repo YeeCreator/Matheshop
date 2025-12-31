@@ -449,3 +449,100 @@
   font-size: 12px;
   color: #999;
 }
+
+/* 设置面板样式 */
+.settings-gear {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 1000;
+
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  cursor: pointer;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
+}
+
+.settings-gear:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+/* 独立设置页（覆盖主界面） */
+.settings-page {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(255, 255, 255, 0.96);
+  overflow: auto;
+  padding: 16px;
+}
+
+.settings-overlay {
+  /* 保留旧类名避免潜在引用，但不再作为默认 UI */
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.settings-panel {
+  /* 从“右上角浮层”变成“页面内容容器” */
+  position: relative;
+  top: auto;
+  right: auto;
+  width: min(720px, calc(100vw - 32px));
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+  margin: 0 auto;
+}
+
+.settings-header {
+  display: grid;
+  grid-template-columns: 30px 1fr 30px;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-back {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.settings-back:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.settings-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.settings-close:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.settings-section {
+  margin-top: 12px;
+}
