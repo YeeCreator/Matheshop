@@ -86,4 +86,7 @@ export type CellNode = {
 
   /** 连接线（自由双向连接） */
   edges?: CanvasEdge[]
+
+  /** 用户可见的递增编号（用于标题栏展示），与树深度 depth 无关 */
+  seq?: number
 }

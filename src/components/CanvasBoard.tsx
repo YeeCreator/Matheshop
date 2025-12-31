@@ -61,7 +61,7 @@ type FormulaItem = {
 }
 
 export default function CanvasBoard(props: CanvasBoardProps) {
-  const { tool, color, onHistoryPush, requestClearToken } = props
+  const { color, onHistoryPush, requestClearToken } = props
 
   // Engine selection（由 App 通过 window 事件同步；避免额外全局状态库）
   const engineSelectionRef = useRef<EngineSelectionState>({ choice: 'builtin_native' })
@@ -108,15 +108,31 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const [editingCellId, setEditingCellId] = useState<string | null>(null)
   const [dropHintCellId, setDropHintCellId] = useState<string | null>(null)
 
+  const nextCellSeqRef = useRef<number>(1)
+
+  const DRAG_START_DELAY_MS = 150
+  const DRAG_START_THRESHOLD_PX = 4
+
+  const dragStartTimerRef = useRef<number | null>(null)
+
   const draggingCellRef = useRef<
     | null
     | {
         id: string
         pointerId: number
         startWorld: { x: number; y: number }
+        startScreen: { x: number; y: number }
         startPos: { x: number; y: number }
         /** 拖拽对象的 parentWorld（用于把 world 位移换算到 local 位移） */
         parentWorld: { x: number; y: number }
+        /** 是否已满足“按住 >= 150ms” */
+        heldReady: boolean
+        /** 是否已满足“移动超过阈值” */
+        movedReady: boolean
+        /** 是否已正式进入拖拽（两条件都满足后才为 true） */
+        isDragging: boolean
+        /** 拖拽过程中是否发生了真实移动（用于决定是否写入“移动单元框”历史） */
+        didMove: boolean
       }
   >(null)
 
@@ -284,6 +300,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     setSelectedCellId(null)
     setEditingCellId(null)
     setEdges([])
+
+    // 重置递增编号
+    nextCellSeqRef.current = 1
 
     render()
     onHistoryPush({ id: crypto.randomUUID(), label: '清空画布', at: Date.now() }, 'user')
@@ -529,45 +548,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       setSelectedExprToken(null)
     }
 
-    // 左键点击插入：创建一个根 Cell（worldPos/localPos 同值），便于你看到 Notebook 风格骨架
-    if (tool === 'text' && e.button === 0) {
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      const world = screenToWorld(screen, cameraRef.current)
-      const id = crypto.randomUUID()
-      const content = ''
-
-      setCells((prev) => {
-        // 现在的策略：
-        // - x 取点击位置（更像白板）
-        // - y：优先取点击位置；但如果你希望 notebook 一定纵向流式追加，改成使用 getNextRootNotebookY(prev)
-        const y = world.y
-
-        const next: CellNode = {
-          id,
-          parentId: null,
-          localPos: { x: world.x, y },
-          worldPos: { x: world.x, y },
-          size: { w: 420, h: 180 },
-          kind: 'cell',
-          blocks: [],
-          content,
-          children: [],
-        }
-
-        // 如果点击位置和已有根节点重叠严重，或者希望始终 notebook 追加，可启用下面逻辑：
-        // const y = getNextRootNotebookY(prev)
-        // next.localPos.y = y
-        // next.worldPos.y = y
-
-        return [...prev, next]
-      })
-
-      setSelectedCellId(id)
-      setEditingCellId(id)
-      onHistoryPush({ id: crypto.randomUUID(), label: '新建单元框', at: Date.now() }, 'user')
-      scheduleRender()
-      return
-    }
+    // 重要：单击空白处不再创建节点（改为双击创建）
 
     // 框选：空白处左键按下且无 modifier
     if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current && !draggingCellRef.current) {
@@ -578,6 +559,52 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       isBoxSelectingRef.current = true
       return
     }
+  }
+
+  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    // 双击创建节点：避免在连线/平移/拖拽/框选等状态下误触
+    if (isLinkMode) return
+    if (isSpaceDown || isPanning) return
+    if (draggingFormulaRef.current || draggingCellRef.current) return
+    if (isBoxSelectingRef.current) return
+
+    // 只响应左键双击
+    if ((e as unknown as MouseEvent).button !== 0) return
+
+    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+    const world = screenToWorld(screen, cameraRef.current)
+
+    const id = crypto.randomUUID()
+    const seq = nextCellSeqRef.current++
+
+    const content = ''
+
+    setCells((prev) => {
+      const y = world.y
+
+      const next: CellNode = {
+        id,
+        parentId: null,
+        localPos: { x: world.x, y },
+        worldPos: { x: world.x, y },
+        size: { w: 420, h: 180 },
+        kind: 'cell',
+        blocks: [],
+        content,
+        children: [],
+        seq,
+      }
+
+      return [...prev, next]
+    })
+
+    setSelectedCellId(id)
+    setEditingCellId(id)
+    onHistoryPush({ id: crypto.randomUUID(), label: '新建单元框', at: Date.now() }, 'user')
+    scheduleRender()
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -642,25 +669,55 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 拖拽单元框：更新 localPos（已临时禁用“拖拽嵌套/重父级”能力）
+    // 拖拽单元框：更硬核 —— 必须“按住>=150ms 且 移动超过阈值”才开始拖拽
     if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
       const world = screenToWorld(screen, cameraRef.current)
+
+      const d0 = draggingCellRef.current
+
+      if (!d0.isDragging) {
+        const dx = screen.x - d0.startScreen.x
+        const dy = screen.y - d0.startScreen.y
+        const dist = Math.hypot(dx, dy)
+
+        // 先更新 movedReady
+        if (dist >= DRAG_START_THRESHOLD_PX && !d0.movedReady) {
+          const next = { ...d0, movedReady: true }
+          draggingCellRef.current = next
+
+          // 只有两条件都满足才进入拖拽
+          if (next.heldReady) {
+            try {
+              canvas.setPointerCapture(e.pointerId)
+            } catch {
+              // ignore
+            }
+            draggingCellRef.current = { ...next, isDragging: true }
+          }
+        }
+
+        // 未进入拖拽前，绝不移动
+        if (!draggingCellRef.current?.isDragging) return
+      }
+
       const d = draggingCellRef.current
+      if (!d) return
 
       const dxWorld = world.x - d.startWorld.x
       const dyWorld = world.y - d.startWorld.y
 
-      setCells((prev) => {
-        const next = updateCellById(prev, d.id, (c) => ({
+      setCells((prev) =>
+        updateCellById(prev, d.id, (c) => ({
           ...c,
           localPos: { x: d.startPos.x + dxWorld, y: d.startPos.y + dyWorld },
-        }))
+        })),
+      )
 
-        // 嵌套功能已关闭：不再计算 drop hint
-        return next
-      })
+      if (!d.didMove && (Math.abs(dxWorld) > 0 || Math.abs(dyWorld) > 0)) {
+        draggingCellRef.current = { ...d, didMove: true }
+      }
 
       if (dropHintCellId != null) setDropHintCellId(null)
       scheduleRender()
@@ -765,17 +822,32 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 结束拖拽单元框：嵌套功能已关闭（仅结束拖拽，不做重嵌套）
+    // 结束拖拽单元框：更硬核 —— 必须按住>=150ms 且 移动超过阈值 才会进入拖拽；只有真实移动才写历史
     if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId) {
-      try {
-        canvas.releasePointerCapture(e.pointerId)
-      } catch {
-        // ignore
+      // 先清理长按计时器
+      if (dragStartTimerRef.current != null) {
+        window.clearTimeout(dragStartTimerRef.current)
+        dragStartTimerRef.current = null
+      }
+
+      const d = draggingCellRef.current
+
+      // 只有真的进入拖拽后才需要 release
+      if (d.isDragging) {
+        try {
+          canvas.releasePointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
       }
 
       draggingCellRef.current = null
       if (dropHintCellId != null) setDropHintCellId(null)
-      onHistoryPush({ id: crypto.randomUUID(), label: '移动单元框', at: Date.now() }, 'user')
+
+      if (d.isDragging && d.didMove) {
+        onHistoryPush({ id: crypto.randomUUID(), label: '移动单元框', at: Date.now() }, 'user')
+      }
+
       scheduleRender()
       return
     }
@@ -852,6 +924,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUpOrCancel}
           onPointerCancel={handlePointerUpOrCancel}
+          onDoubleClick={handleDoubleClick}
           onWheel={handleWheel}
         />
 
@@ -897,6 +970,14 @@ export default function CanvasBoard(props: CanvasBoardProps) {
               const isDropHint = dropHintCellId === c.id
 
               const title = c.kind === 'group' ? (c.collapsed ? 'Group (collapsed)' : 'Group') : 'Cell'
+
+              // depth 是“嵌套渲染深度”，不是递增编号。
+              // 递增编号使用 c.seq（创建时分配）。
+              const headerLabel = (() => {
+                if (c.kind === 'group') return title
+                if (c.seq != null) return `Cell #${c.seq}`
+                return title
+              })()
 
               const findCellContent = (id: string) => {
                 const n = findCellById(cells, id)
@@ -1037,26 +1118,60 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
                     setSelectedCellId(c.id)
 
-                    // 左键拖拽：记录拖拽起点 world 与起始 localPos
+                    // 左键拖拽：改成“按住 150ms 或移动超过阈值才开始拖拽”
                     if (ev.button !== 0) return
 
-                    canvasEl.setPointerCapture(ev.pointerId)
+                    // 清理可能存在的上一次定时器
+                    if (dragStartTimerRef.current != null) {
+                      window.clearTimeout(dragStartTimerRef.current)
+                      dragStartTimerRef.current = null
+                    }
+
                     const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
                     const world = screenToWorld(screen, cameraRef.current)
 
-                    // setSelectedCellId(c.id)
+                    const armDrag = () => {
+                      const cur = draggingCellRef.current
+                      if (!cur) return
+                      if (cur.pointerId !== ev.pointerId) return
+                      if (cur.isDragging) return
+
+                      // 更硬核：必须同时满足“按住 >=150ms”与“移动超过阈值”
+                      if (!cur.heldReady || !cur.movedReady) return
+
+                      try {
+                        canvasEl.setPointerCapture(ev.pointerId)
+                      } catch {
+                        // ignore
+                      }
+
+                      draggingCellRef.current = { ...cur, isDragging: true }
+                      scheduleRender()
+                    }
+
                     if (multiSelectedIds.length > 1 && multiSelectedIds.includes(c.id)) {
-                      // 多选拖动
-                      canvasEl.setPointerCapture(ev.pointerId)
-                      const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
-                      const world = screenToWorld(screen, cameraRef.current)
+                      // 多选拖动：同样使用延迟/阈值启动
                       draggingCellRef.current = {
                         id: c.id,
                         pointerId: ev.pointerId,
                         startWorld: world,
+                        startScreen: screen,
                         startPos: { x: c.localPos.x, y: c.localPos.y },
                         parentWorld,
+                        heldReady: false,
+                        movedReady: false,
+                        isDragging: false,
+                        didMove: false,
                       }
+
+                      dragStartTimerRef.current = window.setTimeout(() => {
+                        dragStartTimerRef.current = null
+                        const cur = draggingCellRef.current
+                        if (!cur || cur.pointerId !== ev.pointerId) return
+                        draggingCellRef.current = { ...cur, heldReady: true }
+                        armDrag()
+                      }, DRAG_START_DELAY_MS)
+
                       return
                     }
 
@@ -1064,9 +1179,22 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                       id: c.id,
                       pointerId: ev.pointerId,
                       startWorld: world,
+                      startScreen: screen,
                       startPos: { x: c.localPos.x, y: c.localPos.y },
                       parentWorld,
+                      heldReady: false,
+                      movedReady: false,
+                      isDragging: false,
+                      didMove: false,
                     }
+
+                    dragStartTimerRef.current = window.setTimeout(() => {
+                      dragStartTimerRef.current = null
+                      const cur = draggingCellRef.current
+                      if (!cur || cur.pointerId !== ev.pointerId) return
+                      draggingCellRef.current = { ...cur, heldReady: true }
+                      armDrag()
+                    }, DRAG_START_DELAY_MS)
                   }}
 
                   onDoubleClick={(ev) => {
@@ -1079,30 +1207,56 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   {renderPorts()}
                   {renderResizeHandle()}
 
-                  <div className="cell-header">
-                    <span className="cell-title">{title}</span>
-                    <span className="cell-depth">#{depth}</span>
+                  {isSelected && (
+                    <div className="cell-header">
+                      <span className="cell-title">{headerLabel}</span>
+                      <span className="cell-depth" title="嵌套深度（调试）">#{depth}</span>
 
-                    {c.kind === 'group' && (
-                      <button
-                        type="button"
-                        className="cell-collapse"
-                        onClick={(ev) => {
-                          ev.preventDefault()
-                          ev.stopPropagation()
-                          setCells((prev) => updateCellById(prev, c.id, (n) => ({ ...n, collapsed: !n.collapsed })))
-                          scheduleRender()
-                        }}
-                        title={c.collapsed ? '展开' : '折叠'}
-                      >
-                        {c.collapsed ? '▸' : '▾'}
-                      </button>
-                    )}
+                      {c.kind === 'group' && (
+                        <button
+                          type="button"
+                          className="cell-collapse"
+                          onClick={(ev) => {
+                            ev.preventDefault()
+                            ev.stopPropagation()
+                            setCells((prev) => updateCellById(prev, c.id, (n) => ({ ...n, collapsed: !n.collapsed })))
+                            scheduleRender()
+                          }}
+                          title={c.collapsed ? '展开' : '折叠'}
+                        >
+                          {c.collapsed ? '▸' : '▾'}
+                        </button>
+                      )}
 
-                    {/* 暂时禁用显式嵌套：仅保留节点连接（Edge）能力 */}
-                  </div>
+                      {/* 暂时禁用显式嵌套：仅保留节点连接（Edge）能力 */}
+                    </div>
+                  )}
 
-                  <div className="cell-body">
+                  <div className="cell-body"
+                    onDoubleClickCapture={(ev) => {
+                      // 双击内容区进入编辑（捕获阶段，避免子元素 stopPropagation 导致不触发）
+                      const t = ev.target as HTMLElement | null
+                      if (!t) return
+
+                      // 连线模式下不进入编辑，避免误触
+                      if (isLinkMode) return
+
+                      // 如果双击发生在端口/缩放手柄等交互控件上，则忽略
+                      if (t.closest('.cell-port') || t.closest('.cell-resize-handle') || t.closest('.cell-ports')) return
+
+                      // 取消候选拖拽
+                      if (dragStartTimerRef.current != null) {
+                        window.clearTimeout(dragStartTimerRef.current)
+                        dragStartTimerRef.current = null
+                      }
+                      draggingCellRef.current = null
+
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      setSelectedCellId(c.id)
+                      setEditingCellId(c.id)
+                    }}
+                  >
                     {isEditing ? (
                       <textarea
                         className="cell-editor"

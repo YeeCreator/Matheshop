@@ -194,6 +194,16 @@
   box-sizing: border-box;
 }
 
+/* 单元框内容区：默认占满（未选中时 header 不显示） */
+.cell .cell-body {
+  height: 100%;
+}
+
+/* 选中时显示 header，内容区需要扣掉 header 高度 */
+.cell.is-selected .cell-body {
+  height: calc(100% - 28px);
+}
+
 .cell-content {
   margin: 0;
   white-space: pre-wrap;
