@@ -97,16 +97,35 @@ function App() {
 
   return (
     <div className="container">
-      <button
-        ref={settingsButtonRef}
-        type="button"
-        className="settings-gear"
-        aria-label="设置"
-        aria-expanded={activeView === 'settings'}
-        onClick={openSettings}
-      >
-        ⚙
-      </button>
+      {activeView === 'settings' ? null : (
+        <div className="top-toolbar" role="toolbar" aria-label="主工具条">
+          <div className="top-toolbar__left">
+            <strong className="top-toolbar__title">Matheshop</strong>
+            <span className="top-toolbar__sep" />
+            <button type="button" className="top-toolbar__btn" onClick={() => setClearToken((x) => x + 1)}>
+              清空
+            </button>
+
+            <label className="top-toolbar__label">
+              文本颜色
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="top-toolbar__right">
+            <button
+              ref={settingsButtonRef}
+              type="button"
+              className="settings-gear settings-gear--toolbar"
+              aria-label="设置"
+              aria-expanded={false}
+              onClick={openSettings}
+            >
+              ⚙
+            </button>
+          </div>
+        </div>
+      )}
 
       <SettingsPanel
         open={activeView === 'settings'}
@@ -116,7 +135,7 @@ function App() {
       />
 
       {activeView === 'settings' ? null : (
-        <>
+        <div className="content-row">
           <div className="sidebar left-sidebar">
             <ul className="tool-list">
               {toolItems.map((t) => (
@@ -139,15 +158,6 @@ function App() {
 
           <div className="main-content">
             <div className="canvas-toolbar">
-              <button type="button" onClick={() => setClearToken((x) => x + 1)}>
-                清空
-              </button>
-
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                文本颜色
-                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-              </label>
-
               <span className="small-muted">提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</span>
             </div>
 
@@ -171,7 +181,6 @@ function App() {
               onCancel={requestCancel}
             />
 
-
             <div className="panel">
               <h3>图层</h3>
               <ul className="layer-list">
@@ -181,11 +190,6 @@ function App() {
                   </li>
                 ))}
               </ul>
-            </div>
-
-            <div className="panel">
-              <h3>颜色选择器</h3>
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
             </div>
 
             <div className="panel">
@@ -205,7 +209,7 @@ function App() {
               />
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   )
