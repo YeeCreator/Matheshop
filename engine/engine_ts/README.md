@@ -5,14 +5,14 @@
 ## 说明
 
 - 本引擎目前是极简版：仅支持算术表达式（`+ - * / ^`、括号、一元负号）的解析与求值。
-- 前端通过直接 `import` 来调用本引擎，因此无需启动任何后端服务。
+- 前端通过直接 `import` 本引擎代码来调用，因此无需启动任何后端服务。
 
 ## 目录结构
 
-- `src/nativeEngine.ts`：引擎入口（eval）
-- `src/parser/*`：极简算术 parser/AST（与前端解耦，便于后续升级为更完整的符号系统）
+- `src/index.ts`：对外唯一入口（推荐从这里 import）
+- `src/nativeEngine.ts`：内置 TS 本地引擎实现（eval）
+- `src/parser/*`：极简算术 parser/AST
 
 ## 使用方式（代码层）
 
-前端通过 `src/symbolic/engineClient.ts` 统一路由：当引擎选择为 `builtin_native` 时，会调用 `engine/engine_ts/src/nativeEngine.ts`。
-
+- 推荐入口：`engine/engine_ts/src/index.ts`

@@ -5,9 +5,9 @@ import EdgeLayer from './canvas/EdgeLayer'
 import FormulaLayer from './canvas/FormulaLayer'
 import ExprTokenView from './canvas/ExprTokenView'
 import InlineExprEditor from './canvas/InlineExprEditor'
-import { parseArithExpr } from '../symbolic/arithParser'
-import { evalExpression } from '../symbolic/engineClient'
-import type { EngineSelectionState } from '../symbolic/engineSelection'
+import { parseArithExpr } from '../../engine/engine_ts/src/index'
+import { evalExpression } from '../engine/engineClient'
+import type { EngineSelectionState } from '../engine/engineSelection'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
   addChildToParent,

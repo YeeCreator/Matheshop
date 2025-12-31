@@ -1,5 +1,5 @@
 import type React from 'react'
-import type { Token } from '../../symbolic/arithAst'
+import type { Token } from '../../../engine/engine_ts/src/index'
 
 export type ExprTokenViewProps = {
   tokens: Token[]

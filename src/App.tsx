@@ -7,7 +7,7 @@ import {
   saveEngineSelection,
   type EngineChoice,
   type EngineSelectionState,
-} from './symbolic/engineSelection'
+} from './engine/engineSelection'
 import './App.css'
 
 const TOOL_LABELS: Record<Tool, string> = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evalWithNativeEngine } from '../../engine/engine_ts/src/nativeEngine'
+import { evalWithNativeEngine } from '../../engine/engine_ts/src/index'
 
 describe('nativeEngine', () => {
   it('evaluates basic arithmetic', () => {
@@ -44,4 +44,3 @@ describe('nativeEngine', () => {
     if (!r.ok) expect(r.error.code).toBe('division_by_zero')
   })
 })
-

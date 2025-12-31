@@ -125,7 +125,7 @@ pnpm dev
 Invoke-RestMethod http://127.0.0.1:5173/api/engine/health
 ```
 
-前端调用封装：`src/symbolic/pythonEngineClient.ts`（当你在界面里选择“内置 Python 计算引擎”时使用）
+前端调用封装：`src/engine/pythonEngineClient.ts`（当你在界面里选择“内置 Python 计算引擎”时使用）
 
 - 默认走 `/api/engine/v1/eval`（开发推荐）
 - 如需直连后端（例如生产环境/非代理），可设置 `VITE_ENGINE_BASE_URL`（例如 `http://127.0.0.1:8000`）
@@ -135,8 +135,8 @@ Invoke-RestMethod http://127.0.0.1:5173/api/engine/health
 当前阶段实现了“单元框内表达式的隐式节点渲染（token 级别）”，用于后续的符号计算与子树编辑。
 
 - 入口组件：`src/components/canvas/ExprTokenView.tsx`
-- 解析器：`src/symbolic/arithParser.ts`
-- AST/Token 类型：`src/symbolic/arithAst.ts`
+- 解析器（对外入口）：`engine/engine_ts/src/index.ts`（如 `parseArithExpr`）
+- AST/Token 类型（对外入口）：`engine/engine_ts/src/index.ts`（如 `Token`）
 
 ### 2.7.1 当前支持的语法（MVP）
 
@@ -208,7 +208,9 @@ M2 目前采用 **tokenRange 文本替换**：
        utils/
          blocks.ts
          geometry.ts
-   symbolic/
+   engine/
+     engineSelection.ts
+     engineClient.ts
      pythonEngineClient.ts
 
 engine/
