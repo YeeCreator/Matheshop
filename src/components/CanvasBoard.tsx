@@ -373,6 +373,14 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const selectionStartRef = useRef<null | { x: number; y: number }> (null)
   const isBoxSelectingRef = useRef(false)
 
+  // 将“screen(canvas 内像素)”矩形转换为 world 矩形
+  function screenBoxToWorldBox(a: { x: number; y: number }, b: { x: number; y: number }) {
+    const cam = cameraRef.current
+    const w0 = screenToWorld(a, cam)
+    const w1 = screenToWorld(b, cam)
+    return getBoxRect(w0, w1)
+  }
+
   // 单元内“隐式表达式节点”选中态（MVP：按 token 粒度）
   const [selectedExprToken, setSelectedExprToken] = useState<null | { cellId: string; tokenId: string }>(null)
 
@@ -553,9 +561,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 框选：空白处左键按下且无 modifier
     if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current && !draggingCellRef.current) {
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      const world = screenToWorld(screen, cameraRef.current)
-      selectionStartRef.current = world
-      setSelectionBox({ start: world, end: world })
+      // 注意：selectionBox 使用 screen(canvas 内像素) 坐标，渲染/命中都由它统一转换
+      selectionStartRef.current = screen
+      setSelectionBox({ start: screen, end: screen })
       isBoxSelectingRef.current = true
       return
     }
@@ -615,8 +623,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (isBoxSelectingRef.current && selectionStartRef.current) {
       e.preventDefault()
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      const world = screenToWorld(screen, cameraRef.current)
-      setSelectionBox((prev) => prev ? { ...prev, end: world } : null)
+      setSelectionBox((prev) => prev ? { ...prev, end: screen } : null)
       return
     }
 
@@ -772,8 +779,10 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 框选结束
     if (isBoxSelectingRef.current && selectionStartRef.current && selectionBox) {
       isBoxSelectingRef.current = false
-      const box = getBoxRect(selectionBox.start, selectionBox.end)
-      // 遍历所有节点，判断是否与 box 相交
+
+      // selectionBox 是 screen 坐标，命中测试前转换为 world 矩形
+      const box = screenBoxToWorldBox(selectionBox.start, selectionBox.end)
+
       const selected: string[] = []
       const walk = (nodes: CellNode[], parentWorld: { x: number; y: number }) => {
         for (const n of nodes) {
@@ -1481,22 +1490,39 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           </div>
         )}
 
-        {selectionBox && (
-          <div
-            className="canvas-selection-box"
-            style={{
-              position: 'absolute',
-              left: Math.min(selectionBox.start.x, selectionBox.end.x),
-              top: Math.min(selectionBox.start.y, selectionBox.end.y),
-              width: Math.abs(selectionBox.start.x - selectionBox.end.x),
-              height: Math.abs(selectionBox.start.y - selectionBox.end.y),
-              background: 'rgba(0,120,255,0.12)',
-              border: '1.5px solid #1890ff',
-              pointerEvents: 'none',
-              zIndex: 10,
-            }}
-          />
-        )}
+        {selectionBox && (() => {
+          const canvas = canvasRef.current
+          const wrap = wrapRef.current
+          if (!canvas || !wrap) return null
+
+          // selectionBox 是 canvas 内像素；需要映射到 wrap CSS 像素并加上 wrap 偏移
+          const rect = wrap.getBoundingClientRect()
+          const pxToCssX = rect.width / canvas.width
+          const pxToCssY = rect.height / canvas.height
+
+          const left = Math.min(selectionBox.start.x, selectionBox.end.x) * pxToCssX
+          const top = Math.min(selectionBox.start.y, selectionBox.end.y) * pxToCssY
+          const width = Math.abs(selectionBox.start.x - selectionBox.end.x) * pxToCssX
+          const height = Math.abs(selectionBox.start.y - selectionBox.end.y) * pxToCssY
+
+          return (
+            <div
+              className="canvas-selection-box"
+              style={{
+                position: 'absolute',
+                left,
+                top,
+                width,
+                height,
+                background: 'rgba(0,120,255,0.12)',
+                border: '1.5px solid #1890ff',
+                pointerEvents: 'none',
+                zIndex: 10,
+              }}
+            />
+          )
+        })()}
+
       </div>
       <div className="small-muted">
         当前模式：文本/公式 ｜ 缩放：{cameraRef.current.zoom.toFixed(2)}x ｜ 平移：中键拖拽 / 空格+拖拽 ｜
