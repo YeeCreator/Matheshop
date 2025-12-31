@@ -304,6 +304,27 @@ engine/
 - `FormulaLayer`：只负责公式渲染与拖拽开始
 - domain/utils：放在 `src/components/canvas/` 下
 
+### 4.0 坐标系与 Camera（重要）
+
+本项目画布交互采用 **camera 平移/缩放** 模型（类似 draw.io / Obsidian Canvas / Figma）：
+
+- `cameraRef.current = { x, y, zoom }` 表示“当前视口在世界坐标系里的位置与缩放”。
+- 鼠标事件坐标流程：
+  1. DOM `clientX/clientY` -> `getCanvasScreenPoint`（canvas 像素坐标，考虑 DPR）
+  2. 再用 `screenToWorld(screen, camera)` 得到世界坐标
+  3. 渲染时反向用 `worldToScreen(world, camera)` 放回 canvas/DOM 坐标
+
+维护约束（请保持一致）：
+
+- ✅ 平移：通过修改 `cameraRef.current.x/y`（中键拖拽或空格+左键拖拽）
+- ✅ 缩放：通过修改 `cameraRef.current.zoom`（滚轮缩放，范围在 `CanvasBoard` 的 `handleWheel` 中 clamp）
+- ❌ 不使用“滚动条 scroll”作为画布平移的主机制，否则会出现两套平移系统叠加导致坐标错乱。
+
+实现落点：
+
+- 平移手势：`CanvasBoard.tsx` 的 `isPanning/panStartRef/handlePointerMove`
+- 坐标换算：`src/components/canvas/utils/geometry.ts`
+
 ### 4.1 核心状态（建议理解顺序）
 
 - 相机：`cameraRef`

@@ -22,11 +22,27 @@
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 8px;
-  overflow: hidden;
+
+  /* 关键：画板区域独立滚动（类似 draw.io/Obsidian Canvas） */
+  overflow: auto;
   position: relative;
+
+  /* 防止滚动链传递到页面 */
   overscroll-behavior: contain;
-  /* helps avoid scroll anchoring oddities when the page layout changes */
   overflow-anchor: none;
+
+  /* 轻微网格/纸张感（不影响 canvas 绘制，纯视觉） */
+  background-image:
+    radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: 0 0;
+}
+
+/* 工作区里承载 canvas 的“巨大内容层”，让滚动条出现 */
+.canvas-workspace {
+  position: relative;
+  width: 8000px;
+  height: 8000px;
 }
 
 .canvas {
