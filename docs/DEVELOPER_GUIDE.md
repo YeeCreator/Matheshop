@@ -2,6 +2,23 @@
 
 本文档面向维护者，描述 Matheshop 的工程结构、核心模块边界、以及后续重构/开发的约定。
 
+## 0. 文档与变更记录（必读）
+
+本仓库维护以下文档（均为 Markdown）：
+
+- 项目纵览说明（根 README）：`README.md`
+- 产品需求文档（PRD）：`docs/PRD.md`
+- 产品用户手册：`docs/USER_MANUAL.md`
+- 开发者手册（本文）：`docs/DEVELOPER_GUIDE.md`
+- 开发日志：`docs/DEVELOPMENT_LOG.md`
+
+维护规则（强约束）：
+
+- 每次 **新增功能/改动功能/修复错误**，在自测与校验通过后：
+  1) 更新相应文档（开发者文档/用户手册/PRD/README，按需要选择）
+  2) 把本次变更追加到 `docs/DEVELOPMENT_LOG.md`
+- 文档更新应体现“可操作”：包含入口文件、步骤、关键约束与验收口径。
+
 ## 1. 技术栈与约定
 
 - 构建：Vite

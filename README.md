@@ -46,6 +46,15 @@
 - **在设置页**：Esc 返回主界面
 - Delete/Backspace：删除选中的边或节点（输入框内不会拦截）
 
+## 文档
+
+- 产品需求文档（PRD）：`docs/PRD.md`
+- 产品用户手册：`docs/USER_MANUAL.md`
+- 开发者手册：`docs/DEVELOPER_GUIDE.md`
+- 开发日志：`docs/DEVELOPMENT_LOG.md`
+
+> 维护约定：每次新增功能/改动/修复错误，在校验与完工时同步更新相应文档，并把变动追加到开发日志。
+
 ## 本地开发
 
 本项目使用 `pnpm`。
