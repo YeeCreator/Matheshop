@@ -320,9 +320,16 @@ engine/
 - ✅ 缩放：通过修改 `cameraRef.current.zoom`（滚轮缩放，范围在 `CanvasBoard` 的 `handleWheel` 中 clamp）
 - ❌ 不使用“滚动条 scroll”作为画布平移的主机制，否则会出现两套平移系统叠加导致坐标错乱。
 
+#### 4.0.1 缩放范围与浏览器默认缩放（重要）
+
+- 画布缩放范围：**最小 8%（0.08）~ 最大 6400%（64）**。
+- 在浏览器中（以及部分触控板/系统设置下），**Ctrl/⌘ + 滚轮**会触发“页面缩放”。
+  - 为避免出现“整个主界面像网页一样缩放”的错觉，`CanvasBoard` 会在 `onWheel` 里统一 `preventDefault()`，并把此手势也当作画布缩放处理。
+
 实现落点：
 
 - 平移手势：`CanvasBoard.tsx` 的 `isPanning/panStartRef/handlePointerMove`
+- 缩放手势与范围：`CanvasBoard.tsx` 的 `handleWheel`（clamp：0.08~64）
 - 坐标换算：`src/components/canvas/utils/geometry.ts`
 
 ### 4.1 核心状态（建议理解顺序）

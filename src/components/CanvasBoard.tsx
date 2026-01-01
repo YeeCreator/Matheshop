@@ -879,40 +879,54 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
   }
 
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+  useEffect(() => {
+    const wrap = wrapRef.current
+    if (!wrap) return
 
-    // 拿走滚轮，避免页面滚动
-    e.preventDefault()
+    // 用原生监听器（passive: false）确保能阻止浏览器默认的 Ctrl/⌘+Wheel 页面缩放
+    const onWheel = (ev: WheelEvent) => {
+      // 仅在事件来自画布区域内部时处理（wrap 内任何元素都算画布区域）
+      ev.preventDefault()
 
-    const cam = cameraRef.current
+      const canvas = canvasRef.current
+      if (!canvas) return
 
-    // Shift + 滚轮：横向平移
-    if (e.shiftKey && !e.ctrlKey) {
-      cameraRef.current = {
-        ...cam,
-        x: cam.x + e.deltaY / cam.zoom,
+      const cam = cameraRef.current
+
+      // Shift + wheel：横向平移（与 React handler 保持一致）
+      if (ev.shiftKey && !ev.ctrlKey && !ev.metaKey) {
+        cameraRef.current = {
+          ...cam,
+          x: cam.x + ev.deltaY / cam.zoom,
+        }
+        scheduleRender()
+        return
       }
+
+      // 缩放（以鼠标位置为中心）
+      const screen = getCanvasScreenPoint(canvas, ev.clientX, ev.clientY)
+      const worldBefore = screenToWorld(screen, cam)
+
+      const zoomIntensity = 0.0028
+      const factor = Math.exp(-ev.deltaY * zoomIntensity)
+      const nextZoom = clamp(cam.zoom * factor, 0.08, 64)
+
+      cameraRef.current = {
+        zoom: nextZoom,
+        x: worldBefore.x - screen.x / nextZoom,
+        y: worldBefore.y - screen.y / nextZoom,
+      }
+
       scheduleRender()
-      return
     }
 
-    // 普通滚轮：缩放（以鼠标位置为中心）
-    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-    const worldBefore = screenToWorld(screen, cam)
+    wrap.addEventListener('wheel', onWheel, { passive: false })
+    return () => wrap.removeEventListener('wheel', onWheel)
+  }, [scheduleRender])
 
-    const zoomIntensity = 0.0028
-    const factor = Math.exp(-e.deltaY * zoomIntensity)
-    const nextZoom = clamp(cam.zoom * factor, 0.1, 8)
-
-    cameraRef.current = {
-      zoom: nextZoom,
-      x: worldBefore.x - screen.x / nextZoom,
-      y: worldBefore.y - screen.y / nextZoom,
-    }
-
-    scheduleRender()
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    // 由原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
+    e.preventDefault()
   }
 
   const renderLinkModeHint = () => {
@@ -921,7 +935,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     return <div className="canvas-drop-hud">连线模式：依次点击两个单元框创建连接（Esc 退出 / L 切换）</div>
   }
 
-  // （连线逻辑：由 cell 节点自身的 onPointerDown 处理；画布空白处点击在 handlePointerDown 中处理）
 
   return (
     <div className="canvas-shell">
