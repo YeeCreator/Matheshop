@@ -146,6 +146,59 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const commitCellEditing = useCallback(
+    (cellId: string, opts?: { runEval?: boolean }) => {
+      // 退出编辑态
+      setEditingCellId(null)
+
+      // 立刻解析 blocks，用于退出编辑后马上渲染
+      setCells((prev) =>
+        updateCellById(prev, cellId, (next) => ({
+          ...next,
+          blocks: parseBlocksFromText(next.content),
+        })),
+      )
+
+      scheduleRender()
+      onHistoryPush({ id: crypto.randomUUID(), label: '编辑单元框', at: Date.now() }, 'user')
+
+      if (!opts?.runEval) return
+
+      // 保留原 Ctrl/⌘+Enter 行为：提交后求值并追加一行输出
+      // 注意：这里读最新内容用 setCells 回调里的 next.content，避免闭包拿到旧 c.content
+      ;(async () => {
+        const selection = engineSelectionRef.current
+        let latestText = ''
+
+        setCells((prev) =>
+          updateCellById(prev, cellId, (next) => {
+            latestText = next.content
+            return next
+          }),
+        )
+
+        const resp = await evalExpression({
+          text: latestText,
+          engine: { choice: selection.choice },
+        })
+
+        setCells((prev) =>
+          updateCellById(prev, cellId, (next) => {
+            const base = next.blocks && next.blocks.length > 0 ? next.blocks : parseBlocksFromText(next.content)
+            const line = resp.ok ? `= ${resp.result.value}` : `⚠ ${resp.error.message}`
+            return {
+              ...next,
+              blocks: [...base, { id: crypto.randomUUID(), type: 'text', text: line }],
+            }
+          }),
+        )
+
+        scheduleRender()
+      })()
+    },
+    [onHistoryPush, scheduleRender],
+  )
+
   const [isPanning, setIsPanning] = useState(false)
   const panStartRef = useRef<{
     pointerId: number
@@ -519,6 +572,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
+
+    // 编辑中：点击画布空白处视为“完成编辑”
+    if (editingCellId && e.button === 0) {
+      commitCellEditing(editingCellId)
+    }
 
     // 如果正在拖拽公式/单元框，不要让画布再吃到新的 pointerdown
     if (draggingFormulaRef.current || draggingCellRef.current) {
@@ -1109,6 +1167,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   className={`cell${isSelected ? ' is-selected' : ''}${isDropHint ? ' is-drop-hint' : ''}`}
                   style={{ left: xCss, top: yCss, width: c.size.w, height: c.size.h }}
                   onPointerDown={(ev) => {
+                    // 如果正在编辑别的 cell，点到这个 cell 视为“完成编辑”
+                    if (editingCellId && editingCellId !== c.id && ev.button === 0) {
+                      commitCellEditing(editingCellId)
+                    }
+
                     const t = ev.target as HTMLElement | null
                     const tag = t?.tagName?.toLowerCase()
                     const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
@@ -1296,40 +1359,29 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                           if (ev.key === 'Escape') {
                             ev.preventDefault()
                             setEditingCellId(null)
+                            return
                           }
+
+                          // Shift+Enter：换行，不提交
+                          if (ev.key === 'Enter' && ev.shiftKey) return
+
+                          // Ctrl/⌘+Enter：提交并求值
                           if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
                             ev.preventDefault()
-                            setEditingCellId(null)
-
-                            // 先把内容解析成 blocks（维持原行为）
-                            setCells((prev) =>
-                              updateCellById(prev, c.id, (next) => ({
-                                ...next,
-                                blocks: parseBlocksFromText(next.content),
-                              })),
-                            )
-
-                            // 再尝试根据设置选择引擎做“算术求值”（第一阶段）
-                            ;(async () => {
-                              const selection = engineSelectionRef.current
-                              const resp = await evalExpression({
-                                text: c.content,
-                                engine: { choice: selection.choice },
-                              })
-                               setCells((prev) =>
-                                 updateCellById(prev, c.id, (next) => {
-                                   const base = next.blocks && next.blocks.length > 0 ? next.blocks : parseBlocksFromText(next.content)
-                                   const line = resp.ok ? `= ${resp.result.value}` : `⚠ ${resp.error.message}`
-                                   return {
-                                     ...next,
-                                     blocks: [...base, { id: crypto.randomUUID(), type: 'text', text: line }],
-                                   }
-                                 }),
-                               )
-                            })()
-
-                            onHistoryPush({ id: crypto.randomUUID(), label: '编辑单元框', at: Date.now() }, 'user')
+                            commitCellEditing(c.id, { runEval: true })
+                            return
                           }
+
+                          // Enter：提交并退出（立刻渲染）
+                          if (ev.key === 'Enter') {
+                            ev.preventDefault()
+                            commitCellEditing(c.id)
+                            return
+                          }
+                        }}
+                        onBlur={() => {
+                          // 点击编辑区域外：完成编辑并立刻渲染
+                          commitCellEditing(c.id)
                         }}
                       />
                     ) : arithTokens ? (
