@@ -106,3 +106,25 @@ KaTeX 相关资源由构建产物打包输出（可在 `dist/assets/` 看到字�
 ## License
 
 暂未声明（如需开源许可证，可补充 MIT/Apache-2.0 等）。
+
+## Desktop App（Electron）
+
+本项目可以同时以 **Web** 和 **桌面 App（macOS/Windows/Linux）** 形式运行。桌面端使用 Electron，开发时直接加载 Vite dev server，达到接近“热更新”的体验。
+
+### 开发（桌面端）
+
+```powershell
+pnpm install
+pnpm desktop:dev
+```
+
+- 会同时启动 Vite（默认 http://localhost:5173）与 Electron。
+- 修改前端代码后，Vite 会热更新；Electron 窗口会自动刷新/更新（因为它加载的就是 Vite dev server）。
+
+### 打包（桌面端）
+
+```powershell
+pnpm desktop:dist
+```
+
+产物输出到：`dist-desktop/`

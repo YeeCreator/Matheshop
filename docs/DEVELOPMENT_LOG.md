@@ -12,3 +12,11 @@
 - 更新根 `README.md`：补充文档索引（PRD/用户手册/开发者手册/开发日志）
 - 更新 `docs/DEVELOPER_GUIDE.md`：补充文档约定与维护规则、文档入口
 
+## 2026-01-02
+
+### Electron Desktop 支持
+
+- 新增 Electron 相关脚本与配置
+- 更新 README 增加 Electron 部分内容
+- 新增 docs/ELECTRON_MANUAL.md 文档说明
+- 更新 docs/DEVELOPER_GUIDE.md，增加 Electron 开发调试说明

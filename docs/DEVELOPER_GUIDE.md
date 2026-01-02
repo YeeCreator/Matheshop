@@ -244,6 +244,79 @@ M2 目前采用 **tokenRange 文本替换**：
 
 > 约定：不要在设置页直接操作 CanvasBoard 的内部状态；跨模块通信依旧走 `engineSelection` + `CustomEvent` 广播。
 
+## 2.9 Desktop App（Electron）
+
+本项目已接入 Electron，用于将同一套前端代码同时以 Web/桌面 App 形式分发。
+
+- Electron 入口：`electron/main.cjs`
+- preload：`electron/preload.cjs`
+
+### 2.9.1 安装依赖
+
+```powershell
+pnpm install
+```
+
+> 注意：首次安装后，你可能会看到 pnpm 提示有依赖的 build scripts 被忽略（通常与 Electron 下载、原生模块有关）。
+> 
+> 需要按提示执行：
+>
+> ```powershell
+> pnpm approve-builds
+> ```
+>
+> 在交互列表里允许 `electron` 等相关包执行脚本。
+
+### 2.9.2 开发（Vite + Electron）
+
+```powershell
+pnpm desktop:dev
+```
+
+行为说明：
+
+- 同时启动 Vite dev server（默认 5173）
+- Electron 加载 `http://127.0.0.1:5173`
+- 你修改 React 代码时：
+  - 浏览器预览继续可用（`pnpm dev`）
+  - Electron 窗口也会自动刷新/热更新（因为它就是在加载 Vite dev server）
+
+### 2.9.3 打包
+
+```powershell
+pnpm desktop:dist
+```
+
+- 输出目录：`dist-desktop/`
+- 默认目标：macOS(dmg) / Windows(nsis) / Linux(AppImage)
+
+### 2.9.4 WebStorm 配置（同时跑 Web 预览 + Desktop App）
+
+目标：开发时保留你熟悉的 Web 预览，同时也能开 Electron 窗口。
+
+#### 方案 A（推荐）：两个 npm 运行配置，并行启动
+
+1) `Run > Edit Configurations...`
+2) 新建 **npm** 配置：
+   - **Name**：`web:dev`
+   - **package.json**：仓库根 `package.json`
+   - **Command**：`dev`
+3) 再新建一个 **npm** 配置：
+   - **Name**：`desktop:dev`
+   - **Command**：`desktop:dev`
+4) 新建一个 **Compound** 配置（同时启动两个配置）：
+   - **Name**：`dev (web + desktop)`
+   - 选择上面的 `web:dev` 与 `desktop:dev`
+
+> 提示：如果你只想要 Electron，不跑浏览器，就直接运行 `desktop:dev` 即可。
+
+#### 方案 B：只跑 Electron（Electron 内部加载 Vite）
+
+只运行 npm 配置 `desktop:dev`。
+
+- Electron 会自己启动 Vite（脚本里用 concurrently）
+- 这种方式最省心，但你就不需要再单独点 `pnpm dev`
+
 ## 3. 目录结构与职责边界
 
 ```
