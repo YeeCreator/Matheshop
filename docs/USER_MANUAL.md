@@ -28,10 +28,11 @@ pnpm dev
 
 ### 2.2（可选）启动 Python 计算引擎
 
-如果你希望使用“内置 Python 引擎”求值：
+如果你希望使用“内置 Python 引擎”求值，需要先启动本地 HTTP 服务：
 
 ```powershell
-cd engine\engine_python
+cd engine\SymbolicComputationEngineServer
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 $env:PORT = 8000
 .\.venv\Scripts\python.exe -m matheshop_engine_server

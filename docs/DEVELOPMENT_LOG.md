@@ -20,3 +20,13 @@
 - 更新 README 增加 Electron 部分内容
 - 新增 docs/ELECTRON_MANUAL.md 文档说明
 - 更新 docs/DEVELOPER_GUIDE.md，增加 Electron 开发调试说明
+
+## 2026-01-07
+
+### Python 引擎工程重构：核心库与服务层拆分
+
+- 将原 `engine/engine_python` 重构为：
+  - `engine/SymbolicComputationEngine`：纯符号/算术计算核心库（Python 包名：`symcalc`）
+  - `engine/SymbolicComputationEngineServer`：HTTP 服务层（FastAPI，模块名仍为 `matheshop_engine_server`）
+- 核心库移除 FastAPI/uvicorn/pydantic 依赖，服务层通过 `-e ../SymbolicComputationEngine` 引用核心库
+- 同步更新开发者文档与用户手册中的路径、venv 建议与启动命令

@@ -1,6 +1,6 @@
 # engine_ts（内置 TS 本地计算引擎）
 
-目标：提供一个**不依赖后端**的内置计算引擎实现（运行在浏览器端），同时保持工程结构上与 `engine/engine_python` 对齐地放在 `engine/` 目录中。
+目标：提供一个**不依赖后端**的内置计算引擎实现（运行在浏览器端），同时保持工程结构上与 `engine/SymbolicComputationEngine` 对齐地放在 `engine/` 目录中。
 
 ## 说明
 

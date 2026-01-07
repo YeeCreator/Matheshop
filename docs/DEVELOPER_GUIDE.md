@@ -64,32 +64,34 @@ pnpm preview
 - 交互问题优先从 `src/components/CanvasBoard.tsx` 的 pointer/keyboard handler 入手。
 - 坐标系相关 bug：优先检查 `src/components/canvas/utils/geometry.ts` 的 screen/world 换算，以及 CSS 尺寸（wrap 的 bounding box）。
 
-## 2.5 自研 Python 计算引擎（engine/engine_python/）
+## 2.5 内置 Python 计算引擎（拆分：核心库 + HTTP Server）
 
-项目内置一个可独立抽取的 Python 子工程：`engine/engine_python/`（用于与后续 TS 引擎区分）。
+仓库内置两套 Python 相关子工程：
 
-- 核心库：`engine/engine_python/matheshop_engine`（AST + 解析 + NumPy 求值；当前阶段：算术）
-- HTTP 服务：`engine/engine_python/matheshop_engine_server`（FastAPI）
+- **纯计算核心库**：`engine/SymbolicComputationEngine/`（Python 包名：`symcalc`）
+- **HTTP 服务层**：`engine/SymbolicComputationEngineServer/`（模块名：`matheshop_engine_server`，FastAPI，供前端通过 HTTP 调用）
 
-### 2.5.1 Python 环境与依赖
+> 说明：拆分后，`SymbolicComputationEngine` 只负责符号/算术计算，不再包含 FastAPI/uvicorn 等服务端依赖。
 
-推荐使用 `engine/engine_python/.venv`（不要和仓库根目录的其他 venv 混用）。
+### 2.5.1 Python 环境与依赖（推荐）
+
+推荐为 **服务器工程** 单独创建 venv：`engine/SymbolicComputationEngineServer/.venv`。
 
 ```powershell
-cd engine\engine_python
+cd engine\SymbolicComputationEngineServer
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 > 说明：
-> - `engine/engine_python/.venv` 已存在时，直接复用即可。
-> - `requirements.txt` 已包含 `numpy/fastapi/uvicorn/pydantic`。
+> - `engine/SymbolicComputationEngineServer/requirements.txt` 已包含 `fastapi/uvicorn/pydantic`，并通过 `-e ../SymbolicComputationEngine` 以可编辑方式安装核心库 `symcalc`。
 
 ### 2.5.2 启动后端服务
 
 默认端口：`8000`。也支持通过环境变量配置端口：`PORT`。
 
 ```powershell
-cd engine\engine_python
+cd engine\SymbolicComputationEngineServer
 $env:PORT = 8000
 .\.venv\Scripts\python.exe -m matheshop_engine_server
 ```
@@ -105,7 +107,7 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 PowerShell 对 JSON 字符串/`^` 有很多转义坑，推荐直接跑 Python 脚本验证接口：
 
 ```powershell
-cd engine\engine_python
+cd engine\SymbolicComputationEngineServer
 .\.venv\Scripts\python.exe scripts\smoke_test.py
 ```
 
@@ -113,8 +115,8 @@ cd engine\engine_python
 
 `Run > Edit Configurations...` 新建一个 Python 运行配置：
 
-- **Interpreter**：`engine\engine_python\.venv\Scripts\python.exe`
-- **Working directory**：`engine\engine_python`
+- **Interpreter**：`engine\SymbolicComputationEngineServer\.venv\Scripts\python.exe`
+- **Working directory**：`engine\SymbolicComputationEngineServer`
 - **Module name**：`matheshop_engine_server`
 - （可选）Environment：`PORT=8000`
 
@@ -341,10 +343,13 @@ pnpm desktop:dist
 
 engine/
   engine_ts/
-  engine_python/
-    matheshop_engine/
+  SymbolicComputationEngine/
+    symcalc/
+  SymbolicComputationEngineServer/
     matheshop_engine_server/
     scripts/
+
+
 ```
 
 ### 3.1 `cellTypes.ts`（领域类型）
@@ -475,4 +480,4 @@ pnpm build
 提交 PR 前至少保证：
 - lint/build 通过
 - 手动 smoke test：创建/编辑 cell、拖拽、连线、插入公式、清空画布
-- 后端 smoke test：`engine/engine_python/scripts/smoke_test.py`
+- 后端 smoke test：`engine/SymbolicComputationEngineServer/scripts/smoke_test.py`
