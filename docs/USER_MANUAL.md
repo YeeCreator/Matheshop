@@ -32,13 +32,28 @@ pnpm dev
 
 ```powershell
 cd engine\SymbolicComputationEngineServer
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-$env:PORT = 8000
-.\.venv\Scripts\python.exe -m matheshop_engine_server
+.\Start-Server.ps1 -Port 8000
 ```
 
 然后在前端里把引擎切换到“Python”。
+
+### 2.3 演示：在画布里做一次“求值”
+
+> 说明：当前原型里，“符号计算/求值”的演示入口是 **Cell 的求值输出**。
+
+步骤：
+
+1) 在画布空白处 **单击** 创建一个 cell
+2) **双击** cell 进入编辑
+3) 输入一个算术表达式，例如：`1+2*(3^2)`
+4) 按 **Ctrl/⌘ + Enter**：提交并触发求值
+
+结果：
+
+- 成功时：cell 会追加一行输出，例如 `= 19`
+- 失败时：cell 会追加一行警告，例如 `⚠ <错误信息>`
+
+> 提示：如果你选择的是 Python 引擎但后端未启动，通常会看到 `fetch failed` 或 `HTTP 5xx/4xx` 之类的错误信息。
 
 ## 3. 画布基本操作
 
@@ -81,42 +96,3 @@ $env:PORT = 8000
 - 双击 token：弹出局部编辑框（如项目已启用该能力）
 
 如果解析失败，cell 会回退到普通渲染。
-
-## 5. 公式（Formula）
-
-- 公式使用 KaTeX 渲染
-- 公式可拖拽移动
-
-## 6. 连线（Edge）
-
-- 使用快捷键 `L` 进入/退出连线模式
-- 在连线模式下，从一个 cell 的端口拖拽到另一个 cell 端口完成连接
-
-## 7. 顶部工具条与设置页
-
-### 7.1 顶部工具条
-
-位于主界面顶部，包含常用操作：
-
-- 清空画布
-- 文本颜色
-- 设置（齿轮按钮）
-
-### 7.2 设置页
-
-- 点击齿轮进入设置页
-- 在设置页按 `Esc` 或点击左上角返回按钮回到主界面
-- 当前可切换“符号计算系统引擎”：原生 TS / Python / 外接占位
-
-## 8. 常见问题（FAQ）
-
-### 8.1 为什么 Ctrl/⌘ + 滚轮不会缩放网页？
-
-Matheshop 会拦截该默认行为，防止出现“页面整体缩放”的错觉，并把它统一作为画布缩放。
-
-### 8.2 Python 引擎启动了但前端无法调用？
-
-- 确认后端端口是 `8000`（或你的 `PORT` 环境变量）
-- 确认前端开发服务器能访问：`/api/engine/health`
-- 端口被占用时可换成 `8001/8010` 等
-

@@ -481,3 +481,28 @@ pnpm build
 - lint/build 通过
 - 手动 smoke test：创建/编辑 cell、拖拽、连线、插入公式、清空画布
 - 后端 smoke test：`engine/SymbolicComputationEngineServer/scripts/smoke_test.py`
+
+## 2.5.5 前端如何验证“Python 引擎是否在工作”
+
+当前原型里，Python 引擎的可视化演示入口在 **Cell 求值输出**：
+
+1) 启动后端服务（2.5.2）
+2) 前端打开设置页，将引擎切换为 `builtin_python`
+3) 在画布空白处单击创建 cell
+4) 双击 cell 进入编辑，输入表达式（例如 `1+2*(3^2)`）
+5) 按 **Ctrl/⌘ + Enter**（提交并触发求值）
+
+期望结果：
+
+- 成功：cell 会追加一行文本 block，例如 `= 19`
+- 失败：cell 会追加一行警告 block，例如 `⚠ <错误信息>`
+
+如果需要更精确地看错误：
+
+- 打开浏览器 DevTools -> Network
+  - 观察请求：`/api/engine/v1/eval`
+  - 常见问题：
+    - `ERR_CONNECTION_REFUSED`：后端没启动 / 端口不对
+    - `HTTP 500`：后端运行时报错（查看后端终端或 `engine/SymbolicComputationEngineServer/logs/server.log`）
+- DevTools -> Console
+  - 若 fetch 失败，通常能看到浏览器级别的网络错误（DNS/连接拒绝/CORS 等）

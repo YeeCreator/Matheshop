@@ -28,5 +28,12 @@
 - 将原 `engine/engine_python` 重构为：
   - `engine/SymbolicComputationEngine`：纯符号/算术计算核心库（Python 包名：`symcalc`）
   - `engine/SymbolicComputationEngineServer`：HTTP 服务层（FastAPI，模块名仍为 `matheshop_engine_server`）
-- 核心库移除 FastAPI/uvicorn/pydantic 依赖，服务层通过 `-e ../SymbolicComputationEngine` 引用核心库
-- 同步更新开发者文档与用户手册中的路径、venv 建议与启动命令
+- 核心库移除 FastAPI/uvicorn/pydantic 依赖；服务层通过 `-e ../SymbolicComputationEngine` 引用核心库
+- 为服务层增加本地日志文件：`engine/SymbolicComputationEngineServer/logs/server.log`（即使终端输出异常也可定位启动/运行问题）
+- 新增一键启动脚本：`engine/SymbolicComputationEngineServer/Start-Server.ps1`
+- 增强 smoke test 的错误提示：连接失败时给出端口/启动命令/log 路径排查指引
+
+### 文档补齐：如何在 UI 中演示“求值/符号计算”
+
+- 更新 `docs/USER_MANUAL.md`：补充画布中创建 cell、输入表达式并用 Ctrl/⌘+Enter 触发求值的演示步骤
+- 更新 `docs/DEVELOPER_GUIDE.md`：补充如何通过 Network/Console 排查 `/api/engine/v1/eval` 调用失败
