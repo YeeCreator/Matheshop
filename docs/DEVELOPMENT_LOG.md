@@ -21,9 +21,9 @@
 - 新增 docs/ELECTRON_MANUAL.md 文档说明
 - 更新 docs/DEVELOPER_GUIDE.md，增加 Electron 开发调试说明
 
-## 2026-01-07
+## 2026-01-08
 
-### Python 引擎工程重构：核心库与服务层拆分
+### Python 引擎工程重构：核心库与服务层拆分 + 可观测性增强
 
 - 将原 `engine/engine_python` 重构为：
   - `engine/SymbolicComputationEngine`：纯符号/算术计算核心库（Python 包名：`symcalc`）
