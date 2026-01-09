@@ -181,10 +181,10 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const editorPadY = 8 * 2
 
     // cell-editor border: 1px
-    const editorBorder = 1 * 2
+    const editorBorder = 2
 
     // cell 外框 border（肉眼估算，避免极小尺寸时内容被压到 0）
-    const outerBorder = 1 * 2
+    const outerBorder = 2
 
     // ==== 内容区最小可输入尺寸（至少一行一列）====
     const minContentW = asciiW
@@ -1208,11 +1208,21 @@ export default function CanvasBoard(props: CanvasBoardProps) {
               })
 
               // 尝试将单元内容当作算术表达式解析为 token（失败则沿用 blocks 展示）
+              // 注意：只有当内容“整体就是一个表达式”时才使用 token view。
+              // 否则（比如包含换行/混合文本/LaTeX block），应回退到 blocks 渲染，避免出现“渲染为空白/内容丢失”的观感。
               let arithTokens: ReturnType<typeof parseArithExpr>['tokens'] | null = null
+              let isPureArithExpr = false
               try {
-                arithTokens = parseArithExpr(c.content).tokens
+                const parsed = parseArithExpr(c.content)
+                arithTokens = parsed.tokens
+
+                // 粗略判断：token 拼回去能覆盖掉空白后的全文，且包含至少一个 token
+                const compact = (c.content ?? '').replace(/\s+/g, '')
+                const rebuilt = parsed.tokens.map((t) => t.text).join('').replace(/\s+/g, '')
+                isPureArithExpr = parsed.tokens.length > 0 && compact.length > 0 && compact === rebuilt
               } catch {
                 arithTokens = null
+                isPureArithExpr = false
               }
 
               // console.log(c.id, { arithTokens, blocks })
@@ -1532,7 +1542,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                           }}
                         />
                       </div>
-                    ) : arithTokens ? (
+                    ) : isPureArithExpr && arithTokens ? (
                       <>
                         <ExprTokenView
                           tokens={arithTokens}
@@ -1744,4 +1754,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     </div>
   )
 }
+
+
 

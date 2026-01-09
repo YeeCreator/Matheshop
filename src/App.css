@@ -179,10 +179,13 @@
   border-radius: 10px;
   box-shadow: none;
 
-  /* 保持原有裁切行为（避免内容溢出影响周围）。如需公式/阴影不被截断再改成 visible。 */
-  overflow: hidden;
+  /*
+    重要：不要用 overflow:hidden。
+    实测在 grid 居中 + 动态尺寸时，渲染内容（尤其是 token view / KaTeX）可能被裁剪到不可见。
+    内部需要滚动的，交给 .cell-blocks 自己的 overflow 处理。
+  */
+  overflow: visible;
 
-  /* 小动画让选中态更自然 */
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
@@ -607,4 +610,20 @@
 
 .settings-section {
   margin-top: 12px;
+}
+
+/* token 渲染态：在 cell-body 的 grid 居中布局下，给一个稳定的盒子尺寸 */
+.expr-token-view {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+
+  /* 让 token 内容在容器内居中 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /* 多行时允许换行 */
+  white-space: pre-wrap;
 }
