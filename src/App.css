@@ -172,19 +172,41 @@
 .cell {
   position: absolute;
   pointer-events: auto;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #d9d9d9;
+
+  /* 隐式化：默认看起来像“内容直接在画布上” */
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 10px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.10);
+  box-shadow: none;
+
+  /* 保持原有裁切行为（避免内容溢出影响周围）。如需公式/阴影不被截断再改成 visible。 */
   overflow: hidden;
+
+  /* 小动画让选中态更自然 */
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+/* 可选：hover 时给一点点存在感（不想要可删） */
+.cell:hover {
+  border-color: rgba(0, 0, 0, 0.10);
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .cell.is-selected {
+  /* 选中时才“浮起来” */
   outline: 2px solid rgba(33, 150, 243, 0.85);
+  border-color: rgba(0, 0, 0, 0.10);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.10);
 }
 
 .cell.is-drop-hint {
   outline: 2px dashed rgba(244, 67, 54, 0.9);
+  border-color: rgba(244, 67, 54, 0.25);
+  background: rgba(255, 255, 255, 0.92);
   box-shadow:
     0 0 0 3px rgba(244, 67, 54, 0.10),
     0 10px 26px rgba(0, 0, 0, 0.10);
