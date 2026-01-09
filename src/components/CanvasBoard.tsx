@@ -621,7 +621,18 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   // L：切换连线模式；Esc：退出连线模式并清空起点
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
+      // 输入场景：不要触发全局快捷键
+      const t = ev.target as HTMLElement | null
+      const tag = t?.tagName?.toLowerCase()
+      const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
+      const isTyping = tag === 'textarea' || tag === 'input' || isEditable
+
+      // 编辑状态：不允许用 L 切换连线模式（否则输入字母会被抢走）
+      const isInCanvasEditing = editingCellId != null || editor != null
+
       if (ev.key === 'l' || ev.key === 'L') {
+        if (isTyping || isInCanvasEditing) return
+
         ev.preventDefault()
         setIsLinkMode((v) => {
           const next = !v
@@ -629,14 +640,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           return next
         })
       }
+
       if (ev.key === 'Escape') {
+        // Esc 在输入框内也经常用来退出输入；但这里仍允许退出连线模式
         setLinkFromId(null)
         setIsLinkMode(false)
       }
     }
+
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [editingCellId, editor])
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
