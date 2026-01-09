@@ -146,15 +146,93 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 根据文本粗略估算节点大小（MVP：按字符宽度权重 + 行数估算）
+  const estimateCellSizeFromText = useCallback((textRaw: string) => {
+    const text = (textRaw ?? '').replace(/\r\n/g, '\n')
+    const lines = text.split('\n')
+
+    // 经验值：与 .cell-editor 的 12px 等宽字体接近
+    const asciiW = 7
+    const wideW = 12
+    const lineH = 16
+
+    const measureLine = (line: string) => {
+      let w = 0
+      for (const ch of line) {
+        // 简单区分：ASCII 走窄字符，其它（中文/全角/emoji 等）按宽字符
+        w += ch.charCodeAt(0) <= 0x007f ? asciiW : wideW
+      }
+      return w
+    }
+
+    const maxLinePx = Math.max(0, ...lines.map((l) => measureLine(l)))
+    const lineCount = Math.max(1, lines.length)
+
+    // ==== 非内容区固定开销（与 App.css 对齐）====
+    // cell-header 固定高度 28px
+    const headerH = 28
+
+    // cell-body padding: 8px 10px
+    const bodyPadX = 10 * 2
+    const bodyPadY = 8 * 2
+
+    // cell-editor 内部 padding: 8px
+    const editorPadX = 8 * 2
+    const editorPadY = 8 * 2
+
+    // cell-editor border: 1px
+    const editorBorder = 1 * 2
+
+    // cell 外框 border（肉眼估算，避免极小尺寸时内容被压到 0）
+    const outerBorder = 1 * 2
+
+    // ==== 内容区最小可输入尺寸（至少一行一列）====
+    const minContentW = asciiW
+    const minContentH = lineH
+
+    const contentW = Math.max(minContentW, maxLinePx)
+    const contentH = Math.max(minContentH, lineCount * lineH)
+
+    // 目标：返回的是 cell 外框 size，所以需要把 header + body padding + editor padding/border 都算进去
+    const w = clamp(contentW + bodyPadX + editorPadX + editorBorder + outerBorder, 60, 900)
+    const h = clamp(headerH + bodyPadY + contentH + editorPadY + editorBorder + outerBorder, 48, 700)
+
+    return { w, h }
+  }, [])
+
   const commitCellEditing = useCallback(
     (cellId: string, opts?: { runEval?: boolean }) => {
+      // 读取最新内容（避免闭包旧值）
+      let latestText = ''
+      setCells((prev) =>
+        updateCellById(prev, cellId, (next) => {
+          latestText = next.content
+          return next
+        }),
+      )
+
+      const trimmed = (latestText ?? '').trim()
+
+      // 空内容：视为“新建无效/删除节点”
+      if (trimmed.length === 0) {
+        setEditingCellId(null)
+        setSelectedCellId((cur) => (cur === cellId ? null : cur))
+        setCells((prev) => removeCellById(prev, cellId).next)
+        scheduleRender()
+        return
+      }
+
       // 退出编辑态
       setEditingCellId(null)
+
+      // 根据最终内容估算一次尺寸（让初始大小更贴近输入）
+      const nextSize = estimateCellSizeFromText(latestText)
 
       // 立刻解析 blocks，用于退出编辑后马上渲染
       setCells((prev) =>
         updateCellById(prev, cellId, (next) => ({
           ...next,
+          size: nextSize,
           blocks: parseBlocksFromText(next.content),
         })),
       )
@@ -165,17 +243,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       if (!opts?.runEval) return
 
       // 保留原 Ctrl/⌘+Enter 行为：提交后求值并追加一行输出
-      // 注意：这里读最新内容用 setCells 回调里的 next.content，避免闭包拿到旧 c.content
       ;(async () => {
         const selection = engineSelectionRef.current
-        let latestText = ''
-
-        setCells((prev) =>
-          updateCellById(prev, cellId, (next) => {
-            latestText = next.content
-            return next
-          }),
-        )
 
         const resp = await evalExpression({
           text: latestText,
@@ -196,7 +265,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         scheduleRender()
       })()
     },
-    [onHistoryPush, scheduleRender],
+    [estimateCellSizeFromText, onHistoryPush, scheduleRender],
   )
 
   const [isPanning, setIsPanning] = useState(false)
@@ -648,15 +717,20 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     const content = ''
 
+    // 新建节点：占位尺寸尽量小（接近 1 个字符），后续会随着输入实时调整
+    const size = estimateCellSizeFromText(content)
+
     setCells((prev) => {
-      const y = world.y
+      // 让节点中心对齐到点击点
+      const x = world.x - size.w / 2
+      const y = world.y - size.h / 2
 
       const next: CellNode = {
         id,
         parentId: null,
-        localPos: { x: world.x, y },
-        worldPos: { x: world.x, y },
-        size: { w: 420, h: 180 },
+        localPos: { x, y },
+        worldPos: { x, y },
+        size,
         kind: 'cell',
         blocks: [],
         content,
@@ -669,13 +743,61 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     setSelectedCellId(id)
     setEditingCellId(id)
-    onHistoryPush({ id: crypto.randomUUID(), label: '新建单元框', at: Date.now() }, 'user')
+
+    // 注意：这里不写历史；如果用户最终没输入内容会自动删除，不应留痕
     scheduleRender()
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
+
+    // 节点缩放（右下角手柄）：以中心为基准的四向缩放
+    if (resizingCellRef.current && resizingCellRef.current.pointerId === e.pointerId) {
+      e.preventDefault()
+
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+
+      const r = resizingCellRef.current
+      const dx = world.x - r.startWorld.x
+      const dy = world.y - r.startWorld.y
+
+      // 右下角拖拽：宽高随 dx/dy 增长；中心缩放 => 总增量乘 2
+      let nextW = Math.max(40, r.startSize.w + dx * 2)
+      let nextH = Math.max(28, r.startSize.h + dy * 2)
+
+      // Shift 锁定比例
+      if (e.shiftKey) {
+        const aspect = r.aspect > 0 ? r.aspect : 1
+        const byW = nextW / aspect
+        // 取更“贴近用户拖动方向”的方案
+        if (Math.abs(dy) >= Math.abs(dx)) {
+          nextW = nextH * aspect
+        } else {
+          nextH = byW
+        }
+      }
+
+      setCells((prev) =>
+        updateCellById(prev, r.id, (c) => {
+          const oldW = c.size.w
+          const oldH = c.size.h
+          const dw = nextW - oldW
+          const dh = nextH - oldH
+
+          return {
+            ...c,
+            size: { w: nextW, h: nextH },
+            // 维持中心不变：左上角反向移动一半的增量
+            localPos: { x: c.localPos.x - dw / 2, y: c.localPos.y - dh / 2 },
+          }
+        }),
+      )
+
+      scheduleRender()
+      return
+    }
 
     // 框选中
     if (isBoxSelectingRef.current && selectionStartRef.current) {
@@ -1343,47 +1465,59 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                     }}
                   >
                     {isEditing ? (
-                      <textarea
-                        className="cell-editor"
-                        value={c.content}
-                        onChange={(ev) => {
-                          const v = ev.target.value
-                          setCells((prev) =>
-                            updateCellById(prev, c.id, (next) => ({
-                              ...next,
-                              content: v,
-                            })),
-                          )
-                        }}
-                        onKeyDown={(ev) => {
-                          if (ev.key === 'Escape') {
-                            ev.preventDefault()
-                            setEditingCellId(null)
-                            return
-                          }
+                      <div className="cell-editor-wrap">
+                        <textarea
+                          className="cell-editor"
+                          value={c.content}
+                          onChange={(ev) => {
+                            const v = ev.target.value
+                            const nextSize = estimateCellSizeFromText(v)
 
-                          // Shift+Enter：换行，不提交
-                          if (ev.key === 'Enter' && ev.shiftKey) return
+                            // 尺寸变化时保持节点中心稳定：通过调整 localPos 抵消 size 变化
+                            setCells((prev) =>
+                              updateCellById(prev, c.id, (next) => {
+                                const dx = (next.size.w - nextSize.w) / 2
+                                const dy = (next.size.h - nextSize.h) / 2
+                                return {
+                                  ...next,
+                                  content: v,
+                                  size: nextSize,
+                                  localPos: { x: next.localPos.x + dx, y: next.localPos.y + dy },
+                                }
+                              }),
+                            )
+                          }}
+                          onKeyDown={(ev) => {
+                            if (ev.key === 'Escape') {
+                              ev.preventDefault()
+                              // Esc：视为结束编辑；若内容为空会被 commitCellEditing 自动删除
+                              commitCellEditing(c.id)
+                              return
+                            }
 
-                          // Ctrl/⌘+Enter：提交并求值
-                          if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
-                            ev.preventDefault()
-                            commitCellEditing(c.id, { runEval: true })
-                            return
-                          }
+                            // Shift+Enter：换行，不提交
+                            if (ev.key === 'Enter' && ev.shiftKey) return
 
-                          // Enter：提交并退出（立刻渲染）
-                          if (ev.key === 'Enter') {
-                            ev.preventDefault()
+                            // Ctrl/⌘+Enter：提交并求值
+                            if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                              ev.preventDefault()
+                              commitCellEditing(c.id, { runEval: true })
+                              return
+                            }
+
+                            // Enter：提交并退出（立刻渲染）
+                            if (ev.key === 'Enter') {
+                              ev.preventDefault()
+                              commitCellEditing(c.id)
+                              return
+                            }
+                          }}
+                          onBlur={() => {
+                            // 点击编辑区域外：完成编辑并立刻渲染
                             commitCellEditing(c.id)
-                            return
-                          }
-                        }}
-                        onBlur={() => {
-                          // 点击编辑区域外：完成编辑并立刻渲染
-                          commitCellEditing(c.id)
-                        }}
-                      />
+                          }}
+                        />
+                      </div>
                     ) : arithTokens ? (
                       <>
                         <ExprTokenView
@@ -1560,7 +1694,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           const wrap = wrapRef.current
           if (!canvas || !wrap) return null
 
-          // selectionBox 是 canvas 内像素；需要映射到 wrap CSS 像素并加上 wrap 偏移
+          // selectionBox 是 canvas 内像素；需要映射到 wrap CSS 像素
           const rect = wrap.getBoundingClientRect()
           const pxToCssX = rect.width / canvas.width
           const pxToCssY = rect.height / canvas.height
@@ -1587,7 +1721,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             />
           )
         })()}
-
       </div>
       <div className="small-muted">
         当前模式：文本/公式 ｜ 缩放：{cameraRef.current.zoom.toFixed(2)}x ｜ 平移：中键拖拽 / 空格+拖拽 ｜

@@ -230,25 +230,36 @@
   padding: 8px 10px;
   height: calc(100% - 28px);
   box-sizing: border-box;
+
+  /* 内容容器整体居中（水平+垂直） */
+  display: grid;
+  place-items: center;
 }
 
-/* 单元框内容区：默认占满（未选中时 header 不显示） */
-.cell .cell-body {
+/* 编辑态：textarea 本身无法做到“光标/首行”垂直居中，这里实现的是编辑框在节点中垂直居中 */
+.cell-editor-wrap {
+  width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* 选中时显示 header，内容区需要扣掉 header 高度 */
-.cell.is-selected .cell-body {
-  height: calc(100% - 28px);
+/* 渲染态内容容器：居中时仍允许滚动，避免 grid item 最小尺寸撑爆 */
+.cell-blocks,
+.expr-token-view {
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
-.cell-content {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #222;
+.cell-blocks {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
 }
 
 .cell-editor {
@@ -262,6 +273,9 @@
   font-size: 12px;
   line-height: 1.45;
   resize: none;
+
+  /* 编辑态：水平居中 */
+  text-align: center;
 }
 
 .cell-add {
