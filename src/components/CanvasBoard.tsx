@@ -3,15 +3,12 @@ import katex from 'katex'
 import type { CanvasEdge, CellId, CellNode, PortSide } from './cellTypes'
 import EdgeLayer from './canvas/EdgeLayer'
 import FormulaLayer from './canvas/FormulaLayer'
-import ExprTokenView from './canvas/ExprTokenView'
-import InlineExprEditor from './canvas/InlineExprEditor'
-import { parseArithExpr } from '../../engine/engine_ts/src/index'
+import CanvasCellLayer from './canvas/cells/CanvasCellLayer'
 import { evalExpression } from '../engine/engineClient'
 import type { EngineSelectionState } from '../engine/engineSelection'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
   collectCellWorldHits,
-  findCellById,
   removeCellById,
   updateCellById,
 } from './canvas/domain/cellTree'
@@ -21,10 +18,9 @@ import {
   getCanvasScreenPoint,
   resizeCanvasToDisplaySize,
   screenToWorld,
-  worldToScreen,
 } from './canvas/utils/geometry'
-import { parseBlocksFromText, renderBlocksToHtml } from './canvas/utils/blocks'
-import { normalizeRange, type InlineSelection } from './canvas/exprSelection'
+import { parseBlocksFromText } from './canvas/utils/blocks'
+import { type InlineSelection } from './canvas/exprSelection'
 
 export type Tool = 'text'
 
@@ -110,7 +106,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
   const nextCellSeqRef = useRef<number>(1)
 
-  const DRAG_START_DELAY_MS = 150
   const DRAG_START_THRESHOLD_PX = 4
 
   const dragStartTimerRef = useRef<number | null>(null)
@@ -266,6 +261,49 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       })()
     },
     [estimateCellSizeFromText, onHistoryPush, scheduleRender],
+  )
+
+  const handleCellPointerDownForDrag = useCallback(
+    (args: {
+      ev: React.PointerEvent
+      cell: CellNode
+      parentWorld: { x: number; y: number }
+      screen: { x: number; y: number }
+      world: { x: number; y: number }
+    }) => {
+      const { ev, cell: c, parentWorld, screen, world } = args
+
+      // 清理可能存在的上一次定时器
+      if (dragStartTimerRef.current != null) {
+        window.clearTimeout(dragStartTimerRef.current)
+        dragStartTimerRef.current = null
+      }
+
+      draggingCellRef.current = {
+        id: c.id,
+        pointerId: ev.pointerId,
+        startWorld: world,
+        startScreen: screen,
+        startPos: { x: c.localPos.x, y: c.localPos.y },
+        parentWorld,
+        heldReady: false,
+        movedReady: false,
+        isDragging: false,
+        didMove: false,
+      }
+
+      dragStartTimerRef.current = window.setTimeout(() => {
+        dragStartTimerRef.current = null
+
+        const cur = draggingCellRef.current
+        if (!cur) return
+        if (cur.pointerId !== ev.pointerId) return
+
+        // 标记长按就绪；真正进入拖拽仍由 pointermove 中 movedReady+heldReady 一起决定
+        draggingCellRef.current = { ...cur, heldReady: true }
+      }, 150)
+    },
+    [],
   )
 
   const [isPanning, setIsPanning] = useState(false)
@@ -1163,477 +1201,38 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
         {renderLinkModeHint()}
 
-        {/* Cell 层（单元框 UI 骨架） */}
-        <div className="cell-layer" data-tick={renderTick}>
-          {(() => {
-            const cam = cameraRef.current
-            const canvas = canvasRef.current
-            const wrap = wrapRef.current
-            if (!canvas || !wrap) return null
-
-            const rect = wrap.getBoundingClientRect()
-
-            const renderCell = (c: CellNode, depth: number, parentWorld: { x: number; y: number }) => {
-              // 方案A：渲染时实时推导 world（parentWorld + localPos），不依赖 worldPos 缓存。
-              const worldNow = { x: parentWorld.x + c.localPos.x, y: parentWorld.y + c.localPos.y }
-
-              const screenPx = worldToScreen(worldNow, cam)
-              const xCss = (screenPx.x / canvas.width) * rect.width
-              const yCss = (screenPx.y / canvas.height) * rect.height
-
-              const isSelected = selectedCellId === c.id
-              const isEditing = editingCellId === c.id
-              const isDropHint = dropHintCellId === c.id
-
-              const title = c.kind === 'group' ? (c.collapsed ? 'Group (collapsed)' : 'Group') : 'Cell'
-
-              // depth 是“嵌套渲染深度”，不是递增编号。
-              // 递增编号使用 c.seq（创建时分配）。
-              const headerLabel = (() => {
-                if (c.kind === 'group') return title
-                if (c.seq != null) return `Cell #${c.seq}`
-                return title
-              })()
-
-              const findCellContent = (id: string) => {
-                const n = findCellById(cells, id)
-                if (!n) return null
-                return n.content
-              }
-
-              const blocks = c.blocks && c.blocks.length > 0 ? c.blocks : parseBlocksFromText(c.content)
-
-              const htmlContent = renderBlocksToHtml(blocks, {
-                findCellContent: (id) => findCellContent(id),
-              })
-
-              // 尝试将单元内容当作算术表达式解析为 token（失败则沿用 blocks 展示）
-              // 注意：只有当内容“整体就是一个表达式”时才使用 token view。
-              // 否则（比如包含换行/混合文本/LaTeX block），应回退到 blocks 渲染，避免出现“渲染为空白/内容丢失”的观感。
-              let arithTokens: ReturnType<typeof parseArithExpr>['tokens'] | null = null
-              let isPureArithExpr = false
-              try {
-                const parsed = parseArithExpr(c.content)
-                arithTokens = parsed.tokens
-
-                // 粗略判断：token 拼回去能覆盖掉空白后的全文，且包含至少一个 token
-                const compact = (c.content ?? '').replace(/\s+/g, '')
-                const rebuilt = parsed.tokens.map((t) => t.text).join('').replace(/\s+/g, '')
-                isPureArithExpr = parsed.tokens.length > 0 && compact.length > 0 && compact === rebuilt
-              } catch {
-                arithTokens = null
-                isPureArithExpr = false
-              }
-
-              // console.log(c.id, { arithTokens, blocks })
-
-              const renderPorts = () => {
-                const ports: Array<{ port: PortSide; x: number; y: number }> = [
-                  { port: 'n', x: c.size.w / 2, y: 8 },
-                  { port: 'e', x: c.size.w - 8, y: c.size.h / 2 },
-                  { port: 's', x: c.size.w / 2, y: c.size.h - 8 },
-                  { port: 'w', x: 8, y: c.size.h / 2 },
-                ]
-
-                return (
-                  <div className="cell-ports">
-                    {ports.map((p) => {
-                      const isHover = hoverPort?.cellId === c.id && hoverPort.port === p.port
-                      return (
-                        <div
-                          key={p.port}
-                          className={`cell-port${isHover ? ' is-hover' : ''}`}
-                          style={{ left: p.x, top: p.y }}
-                          onPointerDown={(ev) => {
-                            ev.preventDefault()
-                            ev.stopPropagation()
-
-                            const canvasEl = canvasRef.current
-                            if (!canvasEl) return
-
-                            canvasEl.setPointerCapture(ev.pointerId)
-
-                            const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
-                            const world = screenToWorld(screen, cameraRef.current)
-
-                            draggingEdgeRef.current = {
-                              pointerId: ev.pointerId,
-                              fromId: c.id,
-                              fromPort: p.port,
-                              toId: null,
-                              toPort: null,
-                              pointerWorld: world,
-                            }
-
-                            setHoverPort(null)
-                            scheduleRender()
-                          }}
-                        />
-                      )
-                    })}
-                  </div>
-                )
-              }
-
-              const renderResizeHandle = () => {
-                const isSelected = selectedCellId === c.id
-                if (!isSelected) return null
-
-                return (
-                  <div
-                    className="cell-resize-handle"
-                    style={{ left: c.size.w - 10, top: c.size.h - 10 }}
-                    onPointerDown={(ev) => {
-                      ev.preventDefault()
-                      ev.stopPropagation()
-
-                      const canvasEl = canvasRef.current
-                      if (!canvasEl) return
-
-                      canvasEl.setPointerCapture(ev.pointerId)
-                      const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
-                      const world = screenToWorld(screen, cameraRef.current)
-
-                      resizingCellRef.current = {
-                        id: c.id,
-                        pointerId: ev.pointerId,
-                        startWorld: world,
-                        startSize: { ...c.size },
-                        aspect: c.size.w / Math.max(1, c.size.h),
-                      }
-                    }}
-                    title="拖拽缩放（Shift 锁定比例）"
-                  />
-                )
-              }
-
-              return (
-                <div
-                  key={c.id}
-                  className={`cell${isSelected ? ' is-selected' : ''}${isDropHint ? ' is-drop-hint' : ''}`}
-                  style={{ left: xCss, top: yCss, width: c.size.w, height: c.size.h }}
-                  onPointerDown={(ev) => {
-                    // 如果正在编辑别的 cell，点到这个 cell 视为“完成编辑”
-                    if (editingCellId && editingCellId !== c.id && ev.button === 0) {
-                      commitCellEditing(editingCellId)
-                    }
-
-                    const t = ev.target as HTMLElement | null
-                    const tag = t?.tagName?.toLowerCase()
-                    const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
-
-                    // 允许在输入控件内正常获取焦点/输入
-                    if (tag === 'textarea' || tag === 'input' || isEditable) {
-                      ev.stopPropagation()
-                      return
-                    }
-
-                    ev.preventDefault()
-                    ev.stopPropagation()
-
-                    const canvasEl = canvasRef.current
-                    if (!canvasEl) return
-
-                    // 连线模式：点击节点来选择起点/终点
-                    if (isLinkMode && ev.button === 0) {
-                      setSelectedCellId(c.id)
-                      if (linkFromId == null) {
-                        setLinkFromId(c.id)
-                      } else {
-                        ensureEdge(linkFromId, c.id)
-                        setLinkFromId(null)
-                      }
-                      scheduleRender()
-                      return
-                    }
-
-                    setSelectedCellId(c.id)
-
-                    // 左键拖拽：改成“按住 150ms 或移动超过阈值才开始拖拽”
-                    if (ev.button !== 0) return
-
-                    // 清理可能存在的上一次定时器
-                    if (dragStartTimerRef.current != null) {
-                      window.clearTimeout(dragStartTimerRef.current)
-                      dragStartTimerRef.current = null
-                    }
-
-                    const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
-                    const world = screenToWorld(screen, cameraRef.current)
-
-                    const armDrag = () => {
-                      const cur = draggingCellRef.current
-                      if (!cur) return
-                      if (cur.pointerId !== ev.pointerId) return
-                      if (cur.isDragging) return
-
-                      // 更硬核：必须同时满足“按住 >=150ms”与“移动超过阈值”
-                      if (!cur.heldReady || !cur.movedReady) return
-
-                      try {
-                        canvasEl.setPointerCapture(ev.pointerId)
-                      } catch {
-                        // ignore
-                      }
-
-                      draggingCellRef.current = { ...cur, isDragging: true }
-                      scheduleRender()
-                    }
-
-                    if (multiSelectedIds.length > 1 && multiSelectedIds.includes(c.id)) {
-                      // 多选拖动：同样使用延迟/阈值启动
-                      draggingCellRef.current = {
-                        id: c.id,
-                        pointerId: ev.pointerId,
-                        startWorld: world,
-                        startScreen: screen,
-                        startPos: { x: c.localPos.x, y: c.localPos.y },
-                        parentWorld,
-                        heldReady: false,
-                        movedReady: false,
-                        isDragging: false,
-                        didMove: false,
-                      }
-
-                      dragStartTimerRef.current = window.setTimeout(() => {
-                        dragStartTimerRef.current = null
-                        const cur = draggingCellRef.current
-                        if (!cur || cur.pointerId !== ev.pointerId) return
-                        draggingCellRef.current = { ...cur, heldReady: true }
-                        armDrag()
-                      }, DRAG_START_DELAY_MS)
-
-                      return
-                    }
-
-                    draggingCellRef.current = {
-                      id: c.id,
-                      pointerId: ev.pointerId,
-                      startWorld: world,
-                      startScreen: screen,
-                      startPos: { x: c.localPos.x, y: c.localPos.y },
-                      parentWorld,
-                      heldReady: false,
-                      movedReady: false,
-                      isDragging: false,
-                      didMove: false,
-                    }
-
-                    dragStartTimerRef.current = window.setTimeout(() => {
-                      dragStartTimerRef.current = null
-                      const cur = draggingCellRef.current
-                      if (!cur || cur.pointerId !== ev.pointerId) return
-                      draggingCellRef.current = { ...cur, heldReady: true }
-                      armDrag()
-                    }, DRAG_START_DELAY_MS)
-                  }}
-
-                  onDoubleClick={(ev) => {
-                    ev.preventDefault()
-                    ev.stopPropagation()
-                    setSelectedCellId(c.id)
-                    setEditingCellId(c.id)
-                  }}
-                >
-                  {renderPorts()}
-                  {renderResizeHandle()}
-
-                  {isSelected && (
-                    <div className="cell-header">
-                      <span className="cell-title">{headerLabel}</span>
-                      <span className="cell-depth" title="嵌套深度（调试）">#{depth}</span>
-
-                      {c.kind === 'group' && (
-                        <button
-                          type="button"
-                          className="cell-collapse"
-                          onClick={(ev) => {
-                            ev.preventDefault()
-                            ev.stopPropagation()
-                            setCells((prev) => updateCellById(prev, c.id, (n) => ({ ...n, collapsed: !n.collapsed })))
-                            scheduleRender()
-                          }}
-                          title={c.collapsed ? '展开' : '折叠'}
-                        >
-                          {c.collapsed ? '▸' : '▾'}
-                        </button>
-                      )}
-
-                      {/* 暂时禁用显式嵌套：仅保留节点连接（Edge）能力 */}
-                    </div>
-                  )}
-
-                  <div className="cell-body"
-                    onDoubleClickCapture={(ev) => {
-                      // 双击内容区进入编辑（捕获阶段，避免子元素 stopPropagation 导致不触发）
-                      const t = ev.target as HTMLElement | null
-                      if (!t) return
-
-                      // 连线模式下不进入编辑，避免误触
-                      if (isLinkMode) return
-
-                      // 如果双击发生在端口/缩放手柄等交互控件上，则忽略
-                      if (t.closest('.cell-port') || t.closest('.cell-resize-handle') || t.closest('.cell-ports')) return
-
-                      // 取消候选拖拽
-                      if (dragStartTimerRef.current != null) {
-                        window.clearTimeout(dragStartTimerRef.current)
-                        dragStartTimerRef.current = null
-                      }
-                      draggingCellRef.current = null
-
-                      ev.preventDefault()
-                      ev.stopPropagation()
-                      setSelectedCellId(c.id)
-                      setEditingCellId(c.id)
-                    }}
-                  >
-                    {isEditing ? (
-                      <div className="cell-editor-wrap">
-                        <textarea
-                          className="cell-editor"
-                          value={c.content}
-                          onChange={(ev) => {
-                            const v = ev.target.value
-                            const nextSize = estimateCellSizeFromText(v)
-
-                            // 尺寸变化时保持节点中心稳定：通过调整 localPos 抵消 size 变化
-                            setCells((prev) =>
-                              updateCellById(prev, c.id, (next) => {
-                                const dx = (next.size.w - nextSize.w) / 2
-                                const dy = (next.size.h - nextSize.h) / 2
-                                return {
-                                  ...next,
-                                  content: v,
-                                  size: nextSize,
-                                  localPos: { x: next.localPos.x + dx, y: next.localPos.y + dy },
-                                }
-                              }),
-                            )
-                          }}
-                          onKeyDown={(ev) => {
-                            if (ev.key === 'Escape') {
-                              ev.preventDefault()
-                              // Esc：视为结束编辑；若内容为空会被 commitCellEditing 自动删除
-                              commitCellEditing(c.id)
-                              return
-                            }
-
-                            // Shift+Enter：换行，不提交
-                            if (ev.key === 'Enter' && ev.shiftKey) return
-
-                            // Ctrl/⌘+Enter：提交并求值
-                            if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
-                              ev.preventDefault()
-                              commitCellEditing(c.id, { runEval: true })
-                              return
-                            }
-
-                            // Enter：提交并退出（立刻渲染）
-                            if (ev.key === 'Enter') {
-                              ev.preventDefault()
-                              commitCellEditing(c.id)
-                              return
-                            }
-                          }}
-                          onBlur={() => {
-                            // 点击编辑区域外：完成编辑并立刻渲染
-                            commitCellEditing(c.id)
-                          }}
-                        />
-                      </div>
-                    ) : isPureArithExpr && arithTokens ? (
-                      <>
-                        <ExprTokenView
-                          tokens={arithTokens}
-                          selectedTokenId={selectedExprToken?.cellId === c.id ? selectedExprToken.tokenId : null}
-                          onSelectToken={({ tokenId, tokenIndex, anchorRect }) => {
-                            setSelectedExprToken({ cellId: c.id, tokenId })
-
-                            const wrap = wrapRef.current
-                            const wrapRect = wrap?.getBoundingClientRect()
-                            const left = wrapRect ? anchorRect.left - wrapRect.left : anchorRect.left
-                            const top = wrapRect ? anchorRect.bottom - wrapRect.top + 6 : anchorRect.bottom + 6
-
-                            setActiveInlineEditor((prev) => {
-                              const draft = prev?.cellId === c.id ? prev.draft : arithTokens[tokenIndex]?.text ?? ''
-                              return {
-                                cellId: c.id,
-                                selection: { kind: 'tokenRange', start: tokenIndex, end: tokenIndex },
-                                draft,
-                                anchorCss: { left, top },
-                              }
-                            })
-                          }}
-                          onDeselect={() => {
-                            if (selectedExprToken?.cellId === c.id) setSelectedExprToken(null)
-                            if (activeInlineEditor?.cellId === c.id) setActiveInlineEditor(null)
-                          }}
-                          onRequestEdit={({ tokenIndex, anchorRect }) => {
-                            const wrap = wrapRef.current
-                            const wrapRect = wrap?.getBoundingClientRect()
-                            const left = wrapRect ? anchorRect.left - wrapRect.left : anchorRect.left
-                            const top = wrapRect ? anchorRect.bottom - wrapRect.top + 6 : anchorRect.bottom + 6
-
-                            setActiveInlineEditor({
-                              cellId: c.id,
-                              selection: { kind: 'tokenRange', start: tokenIndex, end: tokenIndex },
-                              draft: arithTokens[tokenIndex]?.text ?? '',
-                              anchorCss: { left, top },
-                            })
-                          }}
-                        />
-
-                        {activeInlineEditor?.cellId === c.id && (
-                          <InlineExprEditor
-                            anchorCss={activeInlineEditor.anchorCss}
-                            draft={activeInlineEditor.draft}
-                            onChangeDraft={(v) => setActiveInlineEditor((prev) => (prev ? { ...prev, draft: v } : prev))}
-                            onApply={() => {
-                              if (!activeInlineEditor) return
-                              if (activeInlineEditor.cellId !== c.id) return
-
-                              const sel = activeInlineEditor.selection
-                              if (sel.kind !== 'tokenRange') return
-                              const { start, end } = normalizeRange(sel.start, sel.end)
-
-                              const before = arithTokens.slice(0, start).map((t) => t.text).join('')
-                              const after = arithTokens.slice(end + 1).map((t) => t.text).join('')
-                              const nextContent = `${before}${activeInlineEditor.draft}${after}`
-
-                              setCells((prev) =>
-                                updateCellById(prev, c.id, (next) => ({
-                                  ...next,
-                                  content: nextContent,
-                                  blocks: parseBlocksFromText(nextContent),
-                                })),
-                              )
-
-                              onHistoryPush({ id: crypto.randomUUID(), label: '局部编辑表达式', at: Date.now() }, 'user')
-                              setActiveInlineEditor(null)
-                              scheduleRender()
-                            }}
-                            onCancel={() => {
-                              if (activeInlineEditor?.cellId === c.id) setActiveInlineEditor(null)
-                            }}
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <div className="cell-blocks" dangerouslySetInnerHTML={{ __html: htmlContent }} />
-                    )}
-                  </div>
-
-                  {!c.collapsed && c.children.length > 0 && (
-                    <div className="cell-children">{c.children.map((ch) => renderCell(ch, depth + 1, worldNow))}</div>
-                  )}
-                </div>
-              )
-            }
-
-            return cells.map((c) => renderCell(c, 0, { x: 0, y: 0 }))
-          })()}
-        </div>
+        <CanvasCellLayer
+          cells={cells}
+          camera={cameraRef.current}
+          canvasEl={canvasRef.current}
+          wrapEl={wrapRef.current}
+          renderTick={renderTick}
+          selectedCellId={selectedCellId}
+          editingCellId={editingCellId}
+          dropHintCellId={dropHintCellId}
+          hoverPort={hoverPort}
+          setHoverPort={setHoverPort}
+          isLinkMode={isLinkMode}
+          linkFromId={linkFromId}
+          setLinkFromId={setLinkFromId}
+          ensureEdge={ensureEdge}
+          multiSelectedIds={multiSelectedIds}
+          selectedExprToken={selectedExprToken}
+          setSelectedExprToken={setSelectedExprToken}
+          activeInlineEditor={activeInlineEditor}
+          setActiveInlineEditor={setActiveInlineEditor}
+          estimateCellSizeFromText={estimateCellSizeFromText}
+          setCells={setCells}
+          setSelectedCellId={setSelectedCellId}
+          setEditingCellId={setEditingCellId}
+          commitCellEditing={commitCellEditing}
+          scheduleRender={scheduleRender}
+          draggingEdgeRef={draggingEdgeRef}
+          resizingCellRef={resizingCellRef}
+          canvasRefForPointerCapture={canvasRef}
+          dragStartTimerRef={dragStartTimerRef}
+          draggingCellPointerDown={handleCellPointerDownForDrag}
+        />
 
         <FormulaLayer
           formulas={formulas}
@@ -1754,6 +1353,14 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     </div>
   )
 }
+
+
+
+
+
+
+
+
 
 
 

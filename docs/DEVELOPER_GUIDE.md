@@ -64,6 +64,32 @@ pnpm preview
 - 交互问题优先从 `src/components/CanvasBoard.tsx` 的 pointer/keyboard handler 入手。
 - 坐标系相关 bug：优先检查 `src/components/canvas/utils/geometry.ts` 的 screen/world 换算，以及 CSS 尺寸（wrap 的 bounding box）。
 
+## 2.4.1 Canvas 画布节点（Cell）组件拆分（2026-01-10）
+
+历史上 `CanvasBoard.tsx` 内联渲染了 `.cell-layer` 的全部 DOM（因此你会“看不到画布节点组件”）。
+
+目前 **Cell 渲染层** 已分为以下组件（从外到内）：
+
+- `src/components/canvas/cells/CanvasCellLayer.tsx`
+  - 负责：cell 的 world→screen→css 定位、递归遍历树、为每个 cell 组装渲染所需 props。
+- `src/components/canvas/cells/CanvasCell.tsx`
+  - 负责：单个 cell 的外壳（选中态 class、pointer/dblclick 入口、header、children 递归渲染入口）。
+- `src/components/canvas/cells/CanvasCellBody.tsx`
+  - 负责：cell 的 body 三态分流（编辑 textarea / 表达式 token view + inline editor / blocks HTML）。
+- `src/components/canvas/cells/CanvasCellPorts.tsx`
+  - 负责：端口渲染与“从端口开始拖拽连线”的起点初始化。
+- `src/components/canvas/cells/CanvasCellResizeHandle.tsx`
+  - 负责：右下角缩放手柄的 pointerdown，与 `resizingCellRef` 对接。
+
+`CanvasBoard` 仍保留：camera/pan/zoom、框选、多选拖拽、连线/缩放状态机（move/up）、历史记录等画布级逻辑。
+
+后续如果继续拆分，建议方向：
+
+- 将“group 折叠/展开”按钮逻辑从 Layer 进一步收敛为一个小组件 + 回调（避免在 Cell/Layer 之间重复）。
+- 把 `CanvasCellLayer` 里的“文本解析/arith token 判定”抽成纯函数（或 memo/hook），减少 render 时重复计算。
+
+> 约定：组件只做 UI 与事件转发，状态更新（setCells / draggingRef 等）尽量留在 `CanvasBoard` 或抽到 hooks。
+
 ## 2.5 内置 Python 计算引擎（拆分：核心库 + HTTP Server）
 
 仓库内置两套 Python 相关子工程：
