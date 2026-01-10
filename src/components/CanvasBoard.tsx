@@ -9,13 +9,13 @@ import type { EngineSelectionState } from '../engine/engineSelection'
 import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort as pickNearestPortDomain } from './canvas/domain/edges'
 import {
   collectCellWorldHits,
+  recomputeWorldAll,
   removeCellById,
   updateCellById,
 } from './canvas/domain/cellTree'
 import {
   clamp,
   type Camera,
-  getCanvasScreenPoint,
   resizeCanvasToDisplaySize,
   screenToWorld,
 } from './canvas/utils/geometry'
@@ -85,6 +85,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
 
   const [formulas, setFormulas] = useState<FormulaItem[]>([])
+
+  // 仅用于开发排查：记录最后一次新建节点的信息
+  const lastCreatedCellRef = useRef<null | { id: string; world: { x: number; y: number } }>(null)
 
   const [selectedFormulaId, setSelectedFormulaId] = useState<string | null>(null)
   const draggingFormulaRef = useRef<
@@ -619,6 +622,25 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const selectionStartRef = useRef<null | { x: number; y: number }> (null)
   const isBoxSelectingRef = useRef(false)
 
+  // 基于可滚动容器（canvas-wrap）计算“画布像素坐标”，修复 scroll 后坐标始终落在左上角的问题
+  const getScreenFromWrap = useCallback(
+    (clientX: number, clientY: number): { x: number; y: number } | null => {
+      const canvas = canvasRef.current
+      const wrap = wrapRef.current
+      if (!canvas || !wrap) return null
+
+      const rect = wrap.getBoundingClientRect()
+      const xInWrap = clientX - rect.left + wrap.scrollLeft
+      const yInWrap = clientY - rect.top + wrap.scrollTop
+
+      // 把 wrap 内的 CSS 坐标映射到 canvas 像素（考虑 DPR）
+      const sx = (xInWrap / rect.width) * canvas.width
+      const sy = (yInWrap / rect.height) * canvas.height
+      return { x: sx, y: sy }
+    },
+    [],
+  )
+
   // 框选：screen 坐标转 world 矩形
   const screenBoxToWorldBox = useCallback(
     (a: { x: number; y: number }, b: { x: number; y: number }) => {
@@ -734,7 +756,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (isMiddle || isMiddleByButtons || (isSpaceDown && e.button === 0)) {
       canvas.setPointerCapture(e.pointerId)
       setIsPanning(true)
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       panStartRef.current = { pointerId: e.pointerId, startScreen: screen, startCam: { ...cameraRef.current } }
       return
     }
@@ -749,7 +772,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     // 框选：空白处左键按下且无 modifier
     if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current && !draggingCellRef.current) {
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       dispatchFsm({
         kind: 'CANVAS_POINTER_DOWN',
@@ -782,7 +806,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 只响应左键双击
     if ((e as unknown as MouseEvent).button !== 0) return
 
-    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+    const screen = getScreenFromWrap(e.clientX, e.clientY)
+    if (!screen) return
     const world = screenToWorld(screen, cameraRef.current)
 
     const id = crypto.randomUUID()
@@ -802,6 +827,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         id,
         parentId: null,
         localPos: { x, y },
+        // worldPos 需要始终是“世界坐标”，这里新建的是根节点，所以 worldPos 与 localPos 一致
         worldPos: { x, y },
         size,
         kind: 'cell',
@@ -811,8 +837,20 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         seq,
       }
 
-      return [...prev, next]
+      // 记录，便于调试/聚焦
+      lastCreatedCellRef.current = { id, world: { x, y } }
+
+      // 统一重算 worldPos，避免后续渲染/命中逻辑读到旧值
+      return recomputeWorldAll([...prev, next])
     })
+
+    // 自动把视口聚焦到新节点附近（避免“创建成功但在视口外”）
+    // 说明：对齐到 cell 左上角附近即可，后续如果要精准对齐中心，可用 size.
+    cameraRef.current = {
+      ...cameraRef.current,
+      x: world.x - 200 / cameraRef.current.zoom,
+      y: world.y - 120 / cameraRef.current.zoom,
+    }
 
     setSelectedCellId(id)
     setEditingCellId(id)
@@ -829,7 +867,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (resizingCellRef.current && resizingCellRef.current.pointerId === e.pointerId) {
       e.preventDefault()
 
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
 
       const r = resizingCellRef.current
@@ -875,7 +914,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 框选中（迁移到 FSM 后，这里只负责把坐标发给 FSM）
     if (fsm.state.tag === 'boxSelecting') {
       e.preventDefault()
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       dispatchFsm({
         kind: 'CANVAS_POINTER_MOVE',
@@ -889,7 +929,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 多选拖动：拖动选中节点时，所有被选中的节点一起移动
     if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId && multiSelectedIds.length > 1) {
       e.preventDefault()
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       const d = draggingCellRef.current
       const dxWorld = world.x - d.startWorld.x
@@ -909,7 +950,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 拖拽连线（迁移中：pointerWorld 写入 FSM，hover/吸附仍由这里计算）
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       draggingEdgeRef.current.pointerWorld = world
       dispatchFsm({
@@ -947,7 +989,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 拖拽单元框：更硬核 —— 必须“按住>=150ms 且 移动超过阈值”才开始拖拽
     if (draggingCellRef.current && draggingCellRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
 
       const d0 = draggingCellRef.current
@@ -1002,7 +1045,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 拖拽公式：优先级最高
     if (draggingFormulaRef.current && draggingFormulaRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       const d = draggingFormulaRef.current
       const dx = world.x - d.startWorld.x
@@ -1025,7 +1069,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     e.preventDefault()
     const s = panStartRef.current
     if (!s) return
-    const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+    const screen = getScreenFromWrap(e.clientX, e.clientY)
+    if (!screen) return
     const dxScreen = screen.x - s.startScreen.x
     const dyScreen = screen.y - s.startScreen.y
     const cam = s.startCam
@@ -1046,7 +1091,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     // 框选结束（迁移到 FSM：由 FSM 清空 selectionBox，并在这里计算命中结果）
     if (fsm.state.tag === 'boxSelecting' && selectionBox) {
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       dispatchFsm({
         kind: 'CANVAS_POINTER_UP_OR_CANCEL',
@@ -1107,7 +1153,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         dispatchFsm({ kind: 'HOVER_PORT_SET', hover: null })
       }
 
-      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
 
       dispatchFsm({
@@ -1196,7 +1243,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       }
 
       // 缩放（以鼠标位置为中心）
-      const screen = getCanvasScreenPoint(canvas, ev.clientX, ev.clientY)
+      const screen = getScreenFromWrap(ev.clientX, ev.clientY)
+      if (!screen) return
       const worldBefore = screenToWorld(screen, cam)
 
       const zoomIntensity = 0.0028
@@ -1214,7 +1262,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     wrap.addEventListener('wheel', onWheel, { passive: false })
     return () => wrap.removeEventListener('wheel', onWheel)
-  }, [scheduleRender])
+  }, [scheduleRender, getScreenFromWrap])
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     // 由原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
@@ -1227,183 +1275,234 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     return <div className="canvas-drop-hud">连线模式：依次点击两个单元框创建连接（Esc 退出 / L 切换）</div>
   }
 
+  const renderDevHud = () => {
+    if (!import.meta.env.DEV) return null
+
+    const last = lastCreatedCellRef.current
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          left: 12,
+          top: 12,
+          padding: '8px 10px',
+          borderRadius: 8,
+          background: 'rgba(0,0,0,0.65)',
+          color: '#fff',
+          fontSize: 12,
+          zIndex: 9999,
+          pointerEvents: 'auto',
+          maxWidth: 520,
+          lineHeight: 1.5,
+        }}
+      >
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>DEV 画布调试</div>
+        <div>cells: {cells.length} / formulas: {formulas.length} / edges: {edges.length}</div>
+        <div>
+          cam: x={cameraRef.current.x.toFixed(2)} y={cameraRef.current.y.toFixed(2)} zoom={cameraRef.current.zoom.toFixed(2)}
+        </div>
+        <div>wrap: {wrapRef.current ? 'ok' : 'null'} / canvas: {canvasRef.current ? 'ok' : 'null'}</div>
+        <div>lastCreated: {last ? `${last.id.slice(0, 8)} @ (${last.world.x.toFixed(1)}, ${last.world.y.toFixed(1)})` : 'null'}</div>
+        <button
+          type="button"
+          style={{ marginTop: 6 }}
+          onClick={() => {
+            if (!lastCreatedCellRef.current) return
+            const w = lastCreatedCellRef.current.world
+            cameraRef.current = {
+              ...cameraRef.current,
+              x: w.x - 200 / cameraRef.current.zoom,
+              y: w.y - 120 / cameraRef.current.zoom,
+            }
+            scheduleRender()
+          }}
+        >
+          聚焦到最后节点
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="canvas-shell">
       <div className="canvas-wrap" ref={wrapRef}>
-        <canvas
-          ref={canvasRef}
-          className="canvas"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUpOrCancel}
-          onPointerCancel={handlePointerUpOrCancel}
-          onDoubleClick={handleDoubleClick}
-          onWheel={handleWheel}
-        />
+        <div className="canvas-workspace">
+          <canvas
+            ref={canvasRef}
+            className="canvas"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUpOrCancel}
+            onPointerCancel={handlePointerUpOrCancel}
+            onDoubleClick={handleDoubleClick}
+            onWheel={handleWheel}
+          />
 
-        <EdgeLayer
-          edges={edges}
-          selectedEdgeId={selectedEdgeId}
-          draggingEdge={draggingEdgeRef.current}
-          cells={cells}
-          camera={cameraRef.current}
-          canvasEl={canvasRef.current}
-          wrapEl={wrapRef.current}
-          getPortWorld={getPortWorld}
-          onSelectEdge={(edgeId) => {
-            setSelectedEdgeId(edgeId)
-            setSelectedCellId(null)
-            setSelectedFormulaId(null)
-            scheduleRender()
-          }}
-        />
-
-        {renderLinkModeHint()}
-
-        <CanvasCellLayer
-          cells={cells}
-          camera={cameraRef.current}
-          canvasEl={canvasRef.current}
-          wrapEl={wrapRef.current}
-          renderTick={renderTick}
-          selectedCellId={selectedCellId}
-          editingCellId={editingCellId}
-          dropHintCellId={dropHintCellId}
-          hoverPort={hoverPort}
-          setHoverPort={setHoverPort}
-          isLinkMode={isLinkMode}
-          linkFromId={linkFromId}
-          setLinkFromId={setLinkFromId}
-          ensureEdge={ensureEdge}
-          multiSelectedIds={multiSelectedIds}
-          selectedExprToken={selectedExprToken}
-          setSelectedExprToken={setSelectedExprToken}
-          activeInlineEditor={activeInlineEditor}
-          setActiveInlineEditor={setActiveInlineEditor}
-          estimateCellSizeFromText={estimateCellSizeFromText}
-          setCells={setCells}
-          setSelectedCellId={setSelectedCellId}
-          setEditingCellId={setEditingCellId}
-          commitCellEditing={commitCellEditing}
-          scheduleRender={scheduleRender}
-          draggingEdgeRef={draggingEdgeRef}
-          resizingCellRef={resizingCellRef}
-          canvasRefForPointerCapture={canvasRef}
-          dragStartTimerRef={dragStartTimerRef}
-          draggingCellPointerDown={handleCellPointerDownForDrag}
-        />
-
-        <FormulaLayer
-          formulas={formulas}
-          selectedFormulaId={selectedFormulaId}
-          camera={cameraRef.current}
-          canvasEl={canvasRef.current}
-          wrapEl={wrapRef.current}
-          onSelectFormula={(id) => setSelectedFormulaId(id)}
-          onStartDrag={(d) => {
-            draggingFormulaRef.current = d
-          }}
-        />
-
-        {editor && (
-          <div
-            className="latex-editor"
-            style={{ left: editor.css.left, top: editor.css.top }}
-            onPointerDown={(ev) => {
-              ev.stopPropagation()
+          <EdgeLayer
+            edges={edges}
+            selectedEdgeId={selectedEdgeId}
+            draggingEdge={draggingEdgeRef.current}
+            cells={cells}
+            camera={cameraRef.current}
+            canvasEl={canvasRef.current}
+            wrapEl={wrapRef.current}
+            getPortWorld={getPortWorld}
+            onSelectEdge={(edgeId) => {
+              setSelectedEdgeId(edgeId)
+              setSelectedCellId(null)
+              setSelectedFormulaId(null)
+              scheduleRender()
             }}
-          >
-            <div className="latex-editor-row">
-              <textarea
-                ref={editorInputRef}
-                className="latex-editor-input"
-                placeholder={'输入 LaTeX 或普通文本（例如：\\\\frac{a}{b}）'}
-                value={editor.latex}
-                rows={3}
-                onChange={(ev) => setEditor((prev) => (prev ? { ...prev, latex: ev.target.value } : prev))}
-                onKeyDown={(ev) => {
-                  if (ev.key === 'Escape') {
-                    ev.preventDefault()
-                    setEditor(null)
-                    return
-                  }
-                  if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
-                    ev.preventDefault()
+          />
+
+          {renderLinkModeHint()}
+
+          <CanvasCellLayer
+            cells={cells}
+            camera={cameraRef.current}
+            canvasEl={canvasRef.current}
+            wrapEl={wrapRef.current}
+            renderTick={renderTick}
+            selectedCellId={selectedCellId}
+            editingCellId={editingCellId}
+            dropHintCellId={dropHintCellId}
+            hoverPort={hoverPort}
+            setHoverPort={setHoverPort}
+            isLinkMode={isLinkMode}
+            linkFromId={linkFromId}
+            setLinkFromId={setLinkFromId}
+            ensureEdge={ensureEdge}
+            multiSelectedIds={multiSelectedIds}
+            selectedExprToken={selectedExprToken}
+            setSelectedExprToken={setSelectedExprToken}
+            activeInlineEditor={activeInlineEditor}
+            setActiveInlineEditor={setActiveInlineEditor}
+            estimateCellSizeFromText={estimateCellSizeFromText}
+            setCells={setCells}
+            setSelectedCellId={setSelectedCellId}
+            setEditingCellId={setEditingCellId}
+            commitCellEditing={commitCellEditing}
+            scheduleRender={scheduleRender}
+            draggingEdgeRef={draggingEdgeRef}
+            resizingCellRef={resizingCellRef}
+            canvasRefForPointerCapture={canvasRef}
+            dragStartTimerRef={dragStartTimerRef}
+            draggingCellPointerDown={handleCellPointerDownForDrag}
+          />
+
+          <FormulaLayer
+            formulas={formulas}
+            selectedFormulaId={selectedFormulaId}
+            camera={cameraRef.current}
+            canvasEl={canvasRef.current}
+            wrapEl={wrapRef.current}
+            onSelectFormula={(id) => setSelectedFormulaId(id)}
+            onStartDrag={(d) => {
+              draggingFormulaRef.current = d
+            }}
+          />
+
+          {editor && (
+            <div
+              className="latex-editor"
+              style={{ left: editor.css.left, top: editor.css.top }}
+              onPointerDown={(ev) => {
+                ev.stopPropagation()
+              }}
+            >
+              <div className="latex-editor-row">
+                <textarea
+                  ref={editorInputRef}
+                  className="latex-editor-input"
+                  placeholder={'输入 LaTeX 或普通文本（例如：\\\\frac{a}{b}）'}
+                  value={editor.latex}
+                  rows={3}
+                  onChange={(ev) => setEditor((prev) => (prev ? { ...prev, latex: ev.target.value } : prev))}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Escape') {
+                      ev.preventDefault()
+                      setEditor(null)
+                      return
+                    }
+                    if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+                      ev.preventDefault()
+                      commitFormula(editor.latex, editor.world)
+                      setEditor(null)
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="latex-editor-actions">
+                <button
+                  type="button"
+                  onClick={() => {
                     commitFormula(editor.latex, editor.world)
                     setEditor(null)
+                  }}
+                >
+                  确定
+                </button>
+                <button type="button" onClick={() => setEditor(null)}>
+                  取消
+                </button>
+                <span className="latex-editor-hint">Ctrl/⌘ + Enter 确定，Esc 取消</span>
+              </div>
+
+              <div className="latex-editor-preview">
+                {(() => {
+                  if (!editor.latex.trim()) return <span className="latex-editor-preview-empty">预览</span>
+                  try {
+                    const html = katex.renderToString(editor.latex, {
+                      throwOnError: false,
+                      displayMode: true,
+                      output: 'html',
+                    })
+                    return <div dangerouslySetInnerHTML={{ __html: html }} />
+                  } catch {
+                    // 若不是合法 LaTeX，则按纯文本显示
+                    return <div style={{ whiteSpace: 'pre-wrap' }}>{editor.latex}</div>
                   }
+                })()}
+              </div>
+            </div>
+          )}
+
+          {selectionBox && (() => {
+            const canvas = canvasRef.current
+            const wrap = wrapRef.current
+            if (!canvas || !wrap) return null
+
+            // selectionBox 是 canvas 内像素；需要映射到 wrap CSS 像素
+            const rect = wrap.getBoundingClientRect()
+            const pxToCssX = rect.width / canvas.width
+            const pxToCssY = rect.height / canvas.height
+
+            const left = Math.min(selectionBox.start.x, selectionBox.end.x) * pxToCssX
+            const top = Math.min(selectionBox.start.y, selectionBox.end.y) * pxToCssY
+            const width = Math.abs(selectionBox.start.x - selectionBox.end.x) * pxToCssX
+            const height = Math.abs(selectionBox.start.y - selectionBox.end.y) * pxToCssY
+
+            return (
+              <div
+                className="canvas-selection-box"
+                style={{
+                  position: 'absolute',
+                  left,
+                  top,
+                  width,
+                  height,
+                  background: 'rgba(0,120,255,0.12)',
+                  border: '1.5px solid #1890ff',
+                  pointerEvents: 'none',
+                  zIndex: 10,
                 }}
               />
-            </div>
+            )
+          })()}
 
-            <div className="latex-editor-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  commitFormula(editor.latex, editor.world)
-                  setEditor(null)
-                }}
-              >
-                确定
-              </button>
-              <button type="button" onClick={() => setEditor(null)}>
-                取消
-              </button>
-              <span className="latex-editor-hint">Ctrl/⌘ + Enter 确定，Esc 取消</span>
-            </div>
-
-            <div className="latex-editor-preview">
-              {(() => {
-                if (!editor.latex.trim()) return <span className="latex-editor-preview-empty">预览</span>
-                try {
-                  const html = katex.renderToString(editor.latex, {
-                    throwOnError: false,
-                    displayMode: true,
-                    output: 'html',
-                  })
-                  return <div dangerouslySetInnerHTML={{ __html: html }} />
-                } catch {
-                  // 若不是合法 LaTeX，则按纯文本显示
-                  return <div style={{ whiteSpace: 'pre-wrap' }}>{editor.latex}</div>
-                }
-              })()}
-            </div>
-          </div>
-        )}
-
-        {selectionBox && (() => {
-          const canvas = canvasRef.current
-          const wrap = wrapRef.current
-          if (!canvas || !wrap) return null
-
-          // selectionBox 是 canvas 内像素；需要映射到 wrap CSS 像素
-          const rect = wrap.getBoundingClientRect()
-          const pxToCssX = rect.width / canvas.width
-          const pxToCssY = rect.height / canvas.height
-
-          const left = Math.min(selectionBox.start.x, selectionBox.end.x) * pxToCssX
-          const top = Math.min(selectionBox.start.y, selectionBox.end.y) * pxToCssY
-          const width = Math.abs(selectionBox.start.x - selectionBox.end.x) * pxToCssX
-          const height = Math.abs(selectionBox.start.y - selectionBox.end.y) * pxToCssY
-
-          return (
-            <div
-              className="canvas-selection-box"
-              style={{
-                position: 'absolute',
-                left,
-                top,
-                width,
-                height,
-                background: 'rgba(0,120,255,0.12)',
-                border: '1.5px solid #1890ff',
-                pointerEvents: 'none',
-                zIndex: 10,
-              }}
-            />
-          )
-        })()}
+          {renderDevHud()}
+        </div>
       </div>
       <div className="small-muted">
         当前模式：文本/公式 ｜ 缩放：{cameraRef.current.zoom.toFixed(2)}x ｜ 平移：中键拖拽 / 空格+拖拽 ｜
@@ -1413,6 +1512,14 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     </div>
   )
 }
+
+
+
+
+
+
+
+
 
 
 
