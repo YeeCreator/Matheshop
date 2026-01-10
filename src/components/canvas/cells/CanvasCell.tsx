@@ -5,7 +5,12 @@ import { getCanvasScreenPoint, screenToWorld } from '../utils/geometry'
 import CanvasCellPorts from './CanvasCellPorts'
 import CanvasCellResizeHandle from './CanvasCellResizeHandle'
 import CanvasCellBody from './CanvasCellBody'
+import CanvasCellHeader from './CanvasCellHeader'
+import CanvasCellChildren from './CanvasCellChildren'
+import CanvasCellSelectionOutline from './CanvasCellSelectionOutline'
+import CanvasCellDropHint from './CanvasCellDropHint'
 import type { InlineSelection } from '../exprSelection'
+import type { Token } from '../../../../engine/engine_ts/src/index'
 
 export type CanvasCellProps = {
   cell: CellNode
@@ -29,7 +34,7 @@ export type CanvasCellProps = {
   // content rendering
   htmlContent: string
   isPureArithExpr: boolean
-  arithTokens: Array<{ text: string }> | null
+  arithTokens: Token[] | null
 
   // ports / edges
   hoverPort: null | { cellId: CellId; port: PortSide }
@@ -102,6 +107,8 @@ export type CanvasCellProps = {
   setActiveInlineEditor: React.Dispatch<React.SetStateAction<CanvasCellProps['activeInlineEditor']>>
 
   renderChild: (child: CellNode, depth: number, parentWorld: { x: number; y: number }) => React.ReactNode
+
+  onToggleCollapse?: (cellId: CellId) => void
 }
 
 export default function CanvasCell(props: CanvasCellProps) {
@@ -144,6 +151,7 @@ export default function CanvasCell(props: CanvasCellProps) {
     activeInlineEditor,
     setActiveInlineEditor,
     renderChild,
+    onToggleCollapse,
   } = props
 
   return (
@@ -209,6 +217,9 @@ export default function CanvasCell(props: CanvasCellProps) {
         setEditingCellId(c.id)
       }}
     >
+      <CanvasCellSelectionOutline isSelected={isSelected} />
+      <CanvasCellDropHint isDropHint={isDropHint} />
+
       <CanvasCellPorts
         cellId={c.id}
         cellSize={c.size}
@@ -229,12 +240,13 @@ export default function CanvasCell(props: CanvasCellProps) {
       />
 
       {isSelected && (
-        <div className="cell-header">
-          <span className="cell-title">{headerLabel}</span>
-          <span className="cell-depth" title="嵌套深度（调试）">
-            #{depth}
-          </span>
-        </div>
+        <CanvasCellHeader
+          headerLabel={headerLabel}
+          depth={depth}
+          isGroup={c.kind === 'group'}
+          isCollapsed={!!c.collapsed}
+          onToggleCollapse={c.kind === 'group' ? () => onToggleCollapse?.(c.id) : undefined}
+        />
       )}
 
       <CanvasCellBody
@@ -258,9 +270,13 @@ export default function CanvasCell(props: CanvasCellProps) {
         dragStartTimerRef={dragStartTimerRef}
       />
 
-      {!c.collapsed && c.children.length > 0 && (
-        <div className="cell-children">{c.children.map((ch) => renderChild(ch, depth + 1, worldNow))}</div>
-      )}
+      <CanvasCellChildren
+        collapsed={c.collapsed}
+        childrenNodes={c.children}
+        depth={depth}
+        parentWorld={worldNow}
+        renderChild={renderChild}
+      />
     </div>
   )
 }

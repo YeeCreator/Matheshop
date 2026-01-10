@@ -68,27 +68,72 @@ pnpm preview
 
 历史上 `CanvasBoard.tsx` 内联渲染了 `.cell-layer` 的全部 DOM（因此你会“看不到画布节点组件”）。
 
-目前 **Cell 渲染层** 已分为以下组件（从外到内）：
+目前 **Cell 渲染层** 已分为以下模块（从外到内 / 从逻辑到视图）：
+
+### A. Layer（递归渲染 + 定位 + 状态回调）
 
 - `src/components/canvas/cells/CanvasCellLayer.tsx`
-  - 负责：cell 的 world→screen→css 定位、递归遍历树、为每个 cell 组装渲染所需 props。
+  - 负责：world→screen→css 定位、递归遍历树、为每个 cell 组装渲染所需 props。
+  - 负责：group 折叠状态写入（通过 `updateCellById` 切换 `collapsed`）。
+  - 约定：Layer 尽量不做“内容解析/表达式判定”，应调用纯函数得到渲染模型（见 D）。
+
+### B. Cell 外壳（Event 入口 + 组合视图）
+
 - `src/components/canvas/cells/CanvasCell.tsx`
-  - 负责：单个 cell 的外壳（选中态 class、pointer/dblclick 入口、header、children 递归渲染入口）。
-- `src/components/canvas/cells/CanvasCellBody.tsx`
-  - 负责：cell 的 body 三态分流（编辑 textarea / 表达式 token view + inline editor / blocks HTML）。
+  - 负责：单个 cell 外壳（pointer/dblclick、选中态 class、组合 Header/Body/Ports/Resize/Children）。
+  - 约定：可在这里放少量“事件分流”（如 link mode），但尽量不要让它变成另一个“CanvasBoard”。
+
+### C. View 组件（纯 UI/事件转发，方便替换样式与复用）
+
+- `src/components/canvas/cells/CanvasCellHeader.tsx`
+  - 标题/嵌套深度/折叠按钮。
 - `src/components/canvas/cells/CanvasCellPorts.tsx`
-  - 负责：端口渲染与“从端口开始拖拽连线”的起点初始化。
+  - 端口渲染与“从端口开始拖拽连线”的起点初始化。
 - `src/components/canvas/cells/CanvasCellResizeHandle.tsx`
-  - 负责：右下角缩放手柄的 pointerdown，与 `resizingCellRef` 对接。
+  - 右下角缩放手柄的 pointerdown，与 `resizingCellRef` 对接。
+- `src/components/canvas/cells/CanvasCellChildren.tsx`
+  - children 递归渲染容器（负责 `collapsed` 时不渲染）。
+- `src/components/canvas/cells/CanvasCellSelectionOutline.tsx`
+  - 选中态视觉预留组件（当前样式仍由 `.cell.is-selected` 驱动，组件返回 null）。
+- `src/components/canvas/cells/CanvasCellDropHint.tsx`
+  - drop hint 视觉预留组件（当前样式仍由 `.cell.is-drop-hint` 驱动，组件返回 null）。
+
+### D. Body 与编辑/表达式视图拆分
+
+- `src/components/canvas/cells/CanvasCellBody.tsx`
+  - 负责：body 三态分流（编辑 textarea / 表达式 token view + inline editor / blocks）。
+  - 说明：其内部进一步组合了以下 view 组件：
+- `src/components/canvas/cells/CanvasCellTokenView.tsx`
+  - 表达式 token 展示（薄封装 `ExprTokenView`）。
+- `src/components/canvas/cells/CanvasCellInlineEditor.tsx`
+  - token 就地编辑框（薄封装 `InlineExprEditor`）。
+- `src/components/canvas/cells/CanvasCellBlockView.tsx`
+  - blocks HTML 渲染（封装 `dangerouslySetInnerHTML` 的区域）。
+
+### E. 纯函数（减少 render 重复计算，便于测试）
+
+- `src/components/canvas/cells/getCellRenderModel.ts`
+  - 负责：把 cell 的 content/blocks 解析成 `htmlContent`，并判定/解析算术表达式 token（`Token[]`）。
+  - `CanvasCellLayer` 只消费该渲染模型，不直接做 try/catch 解析。
+- `src/components/canvas/cells/cellSelectionUtils.ts`
+  - 负责：token 选中/inline editor 归属判定等小工具函数（避免散落在组件内）。
+
+### F. Hooks（画布级交互状态机的收敛方向）
+
+- `src/components/canvas/cells/hooks/useCellDrag.ts`
+- `src/components/canvas/cells/hooks/useCellEditing.ts`
+- `src/components/canvas/cells/hooks/useEdgeDrag.ts`
+
+当前阶段这些 hooks 以“薄封装/过渡层”为主，真正的状态机仍主要在 `CanvasBoard.tsx`；后续重构目标是把拖拽/编辑/连线的分支逐步迁移到 hooks，并由 `CanvasBoard` 统一持有和调用。
+
+折叠渲染约束（重要）：
+
+- UI 递归渲染：`CanvasCellChildren` 只在 `!cell.collapsed` 时渲染 children。
+- 命中/框选/拖拽 drop 计算：`src/components/canvas/domain/cellTree.ts` 的 `collectCellWorldHits()` 在 `node.kind === 'group' && node.collapsed` 时会停止向下遍历（确保折叠后子节点不会被命中/框选）。
 
 `CanvasBoard` 仍保留：camera/pan/zoom、框选、多选拖拽、连线/缩放状态机（move/up）、历史记录等画布级逻辑。
 
-后续如果继续拆分，建议方向：
-
-- 将“group 折叠/展开”按钮逻辑从 Layer 进一步收敛为一个小组件 + 回调（避免在 Cell/Layer 之间重复）。
-- 把 `CanvasCellLayer` 里的“文本解析/arith token 判定”抽成纯函数（或 memo/hook），减少 render 时重复计算。
-
-> 约定：组件只做 UI 与事件转发，状态更新（setCells / draggingRef 等）尽量留在 `CanvasBoard` 或抽到 hooks。
+> 约定：View 组件尽量保持“无状态/只转发事件”，状态更新（setCells / draggingRef 等）留在 `CanvasBoard` 或 hooks。
 
 ## 2.5 内置 Python 计算引擎（拆分：核心库 + HTTP Server）
 

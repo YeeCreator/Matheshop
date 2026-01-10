@@ -2,11 +2,10 @@ import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'
 import { worldToScreen } from '../utils/geometry'
-import { findCellById } from '../domain/cellTree'
-import { parseBlocksFromText, renderBlocksToHtml } from '../utils/blocks'
-import { parseArithExpr } from '../../../../engine/engine_ts/src/index'
+import { updateCellById } from '../domain/cellTree'
 import type { InlineSelection } from '../exprSelection'
 import CanvasCell from './CanvasCell'
+import { getCellRenderModel } from './getCellRenderModel'
 
 export type DraggingEdgeState =
   | null
@@ -154,39 +153,7 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
       const isEditing = editingCellId === c.id
       const isDropHint = dropHintCellId === c.id
 
-      const title = c.kind === 'group' ? (c.collapsed ? 'Group (collapsed)' : 'Group') : 'Cell'
-      const headerLabel = (() => {
-        if (c.kind === 'group') return title
-        if (c.seq != null) return `Cell #${c.seq}`
-        return title
-      })()
-
-      const findCellContent = (id: string) => {
-        const n = findCellById(cells, id)
-        if (!n) return null
-        return n.content
-      }
-
-      const blocks = c.blocks && c.blocks.length > 0 ? c.blocks : parseBlocksFromText(c.content)
-      const htmlContent = renderBlocksToHtml(blocks, {
-        findCellContent: (id) => findCellContent(id),
-      })
-
-      let arithTokens: ReturnType<typeof parseArithExpr>['tokens'] | null = null
-      let isPureArithExpr: boolean
-      try {
-        const parsed = parseArithExpr(c.content)
-        arithTokens = parsed.tokens
-        const compact = (c.content ?? '').replace(/\s+/g, '')
-        const rebuilt = parsed.tokens
-          .map((t: { text: string }) => t.text)
-          .join('')
-          .replace(/\s+/g, '')
-        isPureArithExpr = parsed.tokens.length > 0 && compact.length > 0 && compact === rebuilt
-      } catch {
-        arithTokens = null
-        isPureArithExpr = false
-      }
+      const renderModel = getCellRenderModel({ cell: c, cells })
 
       return (
         <CanvasCell
@@ -202,10 +169,10 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
           isSelected={isSelected}
           isEditing={isEditing}
           isDropHint={isDropHint}
-          headerLabel={headerLabel}
-          htmlContent={htmlContent}
-          isPureArithExpr={isPureArithExpr}
-          arithTokens={(arithTokens as Array<{ text: string }> | null) ?? null}
+          headerLabel={renderModel.headerLabel}
+          htmlContent={renderModel.htmlContent}
+          isPureArithExpr={renderModel.isPureArithExpr}
+          arithTokens={renderModel.arithTokens}
           hoverPort={hoverPort}
           setHoverPort={setHoverPort}
           draggingEdgeRef={draggingEdgeRef}
@@ -227,7 +194,11 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
           selectedExprToken={selectedExprToken}
           setSelectedExprToken={setSelectedExprToken}
           activeInlineEditor={activeInlineEditor}
-          setActiveInlineEditor={setActiveInlineEditor as React.Dispatch<React.SetStateAction<any>>}
+          setActiveInlineEditor={setActiveInlineEditor}
+          onToggleCollapse={(cellId) => {
+            setCells((prev) => updateCellById(prev, cellId, (n) => ({ ...n, collapsed: !n.collapsed })))
+            scheduleRender()
+          }}
           renderChild={(child, nextDepth, nextParentWorld) => renderCell(child, nextDepth, nextParentWorld)}
         />
       )

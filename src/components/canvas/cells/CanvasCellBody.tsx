@@ -2,9 +2,11 @@ import React from 'react'
 import type { CellNode } from '../../cellTypes'
 import { updateCellById } from '../domain/cellTree'
 import { parseBlocksFromText } from '../utils/blocks'
-import ExprTokenView from '../ExprTokenView'
-import InlineExprEditor from '../InlineExprEditor'
 import type { InlineSelection } from '../exprSelection'
+import type { Token } from '../../../../engine/engine_ts/src/index'
+import CanvasCellTokenView from './CanvasCellTokenView'
+import CanvasCellInlineEditor from './CanvasCellInlineEditor'
+import CanvasCellBlockView from './CanvasCellBlockView'
 
 export type CanvasCellBodyProps = {
   cell: CellNode
@@ -14,7 +16,7 @@ export type CanvasCellBodyProps = {
 
   htmlContent: string
   isPureArithExpr: boolean
-  arithTokens: Array<{ text: string }> | null
+  arithTokens: Token[] | null
 
   selectedExprToken: null | { cellId: string; tokenId: string }
   setSelectedExprToken: (v: null | { cellId: string; tokenId: string }) => void
@@ -161,8 +163,8 @@ export default function CanvasCellBody(props: CanvasCellBodyProps) {
         </div>
       ) : isPureArithExpr && arithTokens ? (
         <>
-          <ExprTokenView
-            tokens={arithTokens as any}
+          <CanvasCellTokenView
+            tokens={arithTokens}
             selectedTokenId={selectedExprToken?.cellId === c.id ? selectedExprToken.tokenId : null}
             onSelectToken={({ tokenId, tokenIndex, anchorRect }) => {
               setSelectedExprToken({ cellId: c.id, tokenId })
@@ -202,7 +204,7 @@ export default function CanvasCellBody(props: CanvasCellBodyProps) {
           />
 
           {activeInlineEditor?.cellId === c.id && (
-            <InlineExprEditor
+            <CanvasCellInlineEditor
               anchorCss={activeInlineEditor.anchorCss}
               draft={activeInlineEditor.draft}
               onChangeDraft={(v) =>
@@ -224,10 +226,10 @@ export default function CanvasCellBody(props: CanvasCellBodyProps) {
                 const start = Math.min(sel.start, sel.end)
                 const end = Math.max(sel.start, sel.end)
 
-                const before = (arithTokens as any).slice(0, start).map((t: { text: string }) => t.text).join('')
-                const after = (arithTokens as any)
+                const before = arithTokens.slice(0, start).map((t) => t.text).join('')
+                const after = arithTokens
                   .slice(end + 1)
-                  .map((t: { text: string }) => t.text)
+                  .map((t) => t.text)
                   .join('')
                 const nextContent = `${before}${activeInlineEditor.draft}${after}`
 
@@ -249,7 +251,7 @@ export default function CanvasCellBody(props: CanvasCellBodyProps) {
           )}
         </>
       ) : (
-        <div className="cell-blocks" dangerouslySetInnerHTML={{ __html: htmlContent }} />
+        <CanvasCellBlockView htmlContent={htmlContent} />
       )}
     </div>
   )
