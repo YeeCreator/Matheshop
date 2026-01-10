@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import katex from 'katex'
-import type { CanvasEdge, CellId, CellNode, PortSide } from './cellTypes'
+import type { CanvasEdge, CellNode, PortSide } from './cellTypes'
 import EdgeLayer from './canvas/EdgeLayer'
 import FormulaLayer from './canvas/FormulaLayer'
 import CanvasCellLayer from './canvas/cells/CanvasCellLayer'
@@ -20,7 +20,9 @@ import {
   screenToWorld,
 } from './canvas/utils/geometry'
 import { parseBlocksFromText } from './canvas/utils/blocks'
-import { type InlineSelection } from './canvas/exprSelection'
+import { useCanvasFsm } from './canvas/fsm/useCanvasFsm'
+import type { CanvasFsmCommand } from './canvas/fsm/types'
+import type { InlineSelection } from './canvas/exprSelection'
 
 export type Tool = 'text'
 
@@ -325,6 +327,18 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       }
   >(null)
 
+  // 表达式 token 选择 / 行内编辑器（用于算式 token 的替换编辑）
+  const [selectedExprToken, setSelectedExprToken] = useState<null | { cellId: string; tokenId: string }>(null)
+  const [activeInlineEditor, setActiveInlineEditor] = useState<
+    | null
+    | {
+        cellId: string
+        selection: InlineSelection
+        draft: string
+        anchorCss: { left: number; top: number }
+      }
+  >(null)
+
   const editorInputRef = useRef<HTMLTextAreaElement | null>(null)
 
   const [renderTick, setRenderTick] = useState(0)
@@ -515,6 +529,78 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const [edges, setEdges] = useState<CanvasEdge[]>([])
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
 
+  const [isLinkMode, setIsLinkMode] = useState(false)
+  const [linkFromId, setLinkFromId] = useState<string | null>(null)
+
+  const draggingEdgeRef = useRef<
+    | null
+    | {
+        pointerId: number
+        fromId: string
+        fromPort: PortSide
+        toId: string | null
+        toPort: PortSide | null
+        pointerWorld: { x: number; y: number }
+      }
+  >(null)
+
+  const [hoverPort, setHoverPort] = useState<null | { cellId: string; port: PortSide }>(null)
+
+  const ensureEdge = useCallback((from: string, to: string, fromPort?: PortSide, toPort?: PortSide) => {
+    if (from === to) return
+    setEdges((prev) => {
+      const next = ensureEdgeUnique(prev, { from, to, fromPort, toPort })
+      return next.map((e) => ('id' in e ? (e as CanvasEdge) : ({ ...e, id: crypto.randomUUID() } as CanvasEdge)))
+    })
+  }, [])
+
+  const getPortWorld = useCallback(
+    (cellId: string, port: PortSide, hits: unknown): { x: number; y: number } | null => {
+      // hits 由 EdgeLayer 传入，这里做运行期收敛，避免因为渐进迁移导致的类型不一致
+      return getPortWorldDomain({ cells, hits: hits as ReturnType<typeof collectCellWorldHits>, cellId, port })
+    },
+    [cells],
+  )
+
+  const pickNearestPort = useCallback(
+    (pointerWorld: { x: number; y: number }): { cellId: string; port: PortSide } | null => {
+      return pickNearestPortDomain({ cells, pointerWorld })
+    },
+    [cells],
+  )
+
+  // L：切换连线模式；Esc：退出连线模式并清空起点
+  useEffect(() => {
+    const onKeyDown = (ev: KeyboardEvent) => {
+      // 输入场景：不要触发全局快捷键
+      const t = ev.target as HTMLElement | null
+      const tag = t?.tagName?.toLowerCase()
+      const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
+      const isTyping = tag === 'textarea' || tag === 'input' || isEditable
+
+      // 编辑状态：不允许用 L 切换连线模式
+      const isInCanvasEditing = editingCellId != null || editor != null
+
+      if (ev.key === 'l' || ev.key === 'L') {
+        if (isTyping || isInCanvasEditing) return
+        ev.preventDefault()
+        setIsLinkMode((v) => {
+          const next = !v
+          if (!next) setLinkFromId(null)
+          return next
+        })
+      }
+
+      if (ev.key === 'Escape') {
+        setLinkFromId(null)
+        setIsLinkMode(false)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [editingCellId, editor])
+
   /** 右下角缩放手柄拖拽状态 */
   const resizingCellRef = useRef<
     | null
@@ -533,162 +619,86 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const selectionStartRef = useRef<null | { x: number; y: number }> (null)
   const isBoxSelectingRef = useRef(false)
 
-  // 将“screen(canvas 内像素)”矩形转换为 world 矩形
-  function screenBoxToWorldBox(a: { x: number; y: number }, b: { x: number; y: number }) {
-    const cam = cameraRef.current
-    const w0 = screenToWorld(a, cam)
-    const w1 = screenToWorld(b, cam)
-    return getBoxRect(w0, w1)
-  }
+  // 框选：screen 坐标转 world 矩形
+  const screenBoxToWorldBox = useCallback(
+    (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      const x1 = Math.min(a.x, b.x)
+      const y1 = Math.min(a.y, b.y)
+      const x2 = Math.max(a.x, b.x)
+      const y2 = Math.max(a.y, b.y)
 
-  // 单元内“隐式表达式节点”选中态（MVP：按 token 粒度）
-  const [selectedExprToken, setSelectedExprToken] = useState<null | { cellId: string; tokenId: string }>(null)
+      const w1 = screenToWorld({ x: x1, y: y1 }, cameraRef.current)
+      const w2 = screenToWorld({ x: x2, y: y2 }, cameraRef.current)
 
-  // M2：局部编辑（tokenRange 级别，MVP）
-  const [activeInlineEditor, setActiveInlineEditor] = useState<null | {
-    cellId: string
-    selection: InlineSelection
-    draft: string
-    anchorCss: { left: number; top: number }
-  }>(null)
-
-  // 框选辅助函数
-  function getBoxRect(a: { x: number; y: number }, b: { x: number; y: number }) {
-    return {
-      x: Math.min(a.x, b.x),
-      y: Math.min(a.y, b.y),
-      w: Math.abs(a.x - b.x),
-      h: Math.abs(a.y - b.y),
-    }
-  }
-
-  // 判断节点是否与选区相交
-  function cellIntersectsBox(cell: CellNode, box: { x: number; y: number; w: number; h: number }, parentWorld: { x: number; y: number }) {
-    const world = { x: parentWorld.x + cell.localPos.x, y: parentWorld.y + cell.localPos.y }
-    return !(
-      world.x + cell.size.w < box.x ||
-      world.x > box.x + box.w ||
-      world.y + cell.size.h < box.y ||
-      world.y > box.y + box.h
-    )
-  }
-
-  const deleteSelected = useCallback(() => {
-    // 优先删除连接
-    if (selectedEdgeId) {
-      setEdges((prev) => prev.filter((e) => e.id !== selectedEdgeId))
-      setSelectedEdgeId(null)
-      onHistoryPush({ id: crypto.randomUUID(), label: '删除连接', at: Date.now() }, 'user')
-      scheduleRender()
-      return
-    }
-
-    // 再删除节点
-    if (!selectedCellId) return
-    const targetId = selectedCellId
-
-    setCells((prev) => removeCellById(prev, targetId).next)
-    setEdges((prev) => prev.filter((e) => e.from !== targetId && e.to !== targetId))
-
-    setSelectedCellId(null)
-    setEditingCellId(null)
-    setDropHintCellId(null)
-    setHoverPort(null)
-
-    onHistoryPush({ id: crypto.randomUUID(), label: '删除单元节点', at: Date.now() }, 'user')
-    scheduleRender()
-  }, [onHistoryPush, scheduleRender, selectedCellId, selectedEdgeId])
-
-  // Delete/Backspace：删除选中边/节点（输入框内不拦截）
-  useEffect(() => {
-    const onKeyDown = (ev: KeyboardEvent) => {
-      const t = ev.target as HTMLElement | null
-      const tag = t?.tagName?.toLowerCase()
-      const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
-      if (tag === 'textarea' || tag === 'input' || isEditable) return
-
-      if (ev.key === 'Delete' || ev.key === 'Backspace') {
-        ev.preventDefault()
-        deleteSelected()
+      return {
+        x: Math.min(w1.x, w2.x),
+        y: Math.min(w1.y, w2.y),
+        w: Math.abs(w2.x - w1.x),
+        h: Math.abs(w2.y - w1.y),
       }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteSelected])
-
-  const [isLinkMode, setIsLinkMode] = useState(false)
-  const [linkFromId, setLinkFromId] = useState<CellId | null>(null)
-
-  const draggingEdgeRef = useRef<
-    | null
-    | {
-        pointerId: number
-        fromId: CellId
-        fromPort: PortSide
-        toId: CellId | null
-        toPort: PortSide | null
-        pointerWorld: { x: number; y: number }
-      }
-  >(null)
-
-  const [hoverPort, setHoverPort] = useState<null | { cellId: CellId; port: PortSide }>(null)
-
-  const ensureEdge = useCallback((from: CellId, to: CellId, fromPort?: PortSide, toPort?: PortSide) => {
-    if (from === to) return
-    setEdges((prev) => {
-      const next = ensureEdgeUnique(prev, { from, to, fromPort, toPort })
-      return next.map((e) => ('id' in e ? (e as CanvasEdge) : ({ ...e, id: crypto.randomUUID() } satisfies CanvasEdge)))
-    })
-  }, [])
-
-  const getPortWorld = useCallback(
-    (cellId: CellId, port: PortSide, hits: ReturnType<typeof collectCellWorldHits>): { x: number; y: number } | null => {
-      return getPortWorldDomain({ cells, hits, cellId, port })
     },
-    [cells],
+    [],
   )
 
-  const pickNearestPort = useCallback(
-    (pointerWorld: { x: number; y: number }): { cellId: CellId; port: PortSide } | null => {
-      return pickNearestPortDomain({ cells, pointerWorld })
+  const cellIntersectsBox = useCallback(
+    (node: CellNode, box: { x: number; y: number; w: number; h: number }, parentWorld: { x: number; y: number }) => {
+      const x = parentWorld.x + node.localPos.x
+      const y = parentWorld.y + node.localPos.y
+      const rect = { x, y, w: node.size.w, h: node.size.h }
+
+      const xOverlap = rect.x < box.x + box.w && rect.x + rect.w > box.x
+      const yOverlap = rect.y < box.y + box.h && rect.y + rect.h > box.y
+      return xOverlap && yOverlap
     },
-    [cells],
+    [],
   )
 
-  // L：切换连线模式；Esc：退出连线模式并清空起点
-  useEffect(() => {
-    const onKeyDown = (ev: KeyboardEvent) => {
-      // 输入场景：不要触发全局快捷键
-      const t = ev.target as HTMLElement | null
-      const tag = t?.tagName?.toLowerCase()
-      const isEditable = t instanceof HTMLElement ? t.isContentEditable : false
-      const isTyping = tag === 'textarea' || tag === 'input' || isEditable
+  // --- 交互 FSM（渐进迁移：先接入框选/连线）---
+  const applyFsmCommands = useCallback(
+    (cmds: CanvasFsmCommand[]) => {
+      for (const cmd of cmds) {
+        if (cmd.kind === 'SET_SELECTION_BOX') {
+          setSelectionBox(cmd.box)
+          // selectionStartRef/isBoxSelectingRef 仍用于旧逻辑，但这里同步，便于渐进迁移
+          if (cmd.box) {
+            selectionStartRef.current = cmd.box.start
+            isBoxSelectingRef.current = true
+          } else {
+            selectionStartRef.current = null
+            isBoxSelectingRef.current = false
+          }
+          continue
+        }
 
-      // 编辑状态：不允许用 L 切换连线模式（否则输入字母会被抢走）
-      const isInCanvasEditing = editingCellId != null || editor != null
+        if (cmd.kind === 'SET_HOVER_PORT') {
+          setHoverPort(cmd.hover)
+          continue
+        }
 
-      if (ev.key === 'l' || ev.key === 'L') {
-        if (isTyping || isInCanvasEditing) return
+        if (cmd.kind === 'ENSURE_EDGE') {
+          ensureEdge(cmd.fromId, cmd.toId, cmd.fromPort, cmd.toPort)
+          continue
+        }
 
-        ev.preventDefault()
-        setIsLinkMode((v) => {
-          const next = !v
-          if (!next) setLinkFromId(null)
-          return next
-        })
+        if (cmd.kind === 'PUSH_HISTORY') {
+          onHistoryPush({ id: crypto.randomUUID(), label: cmd.label, at: Date.now() }, 'user')
+        }
       }
+    },
+    [onHistoryPush, ensureEdge],
+  )
 
-      if (ev.key === 'Escape') {
-        // Esc 在输入框内也经常用来退出输入；但这里仍允许退出连线模式
-        setLinkFromId(null)
-        setIsLinkMode(false)
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [editingCellId, editor])
+  const { model: fsm, dispatch: dispatchFsm } = useCanvasFsm({
+    camera: cameraRef.current,
+    getFreshCamera: () => ({ ...cameraRef.current }),
+    onCommands: applyFsmCommands,
+    externalSelectedCellId: selectedCellId,
+    externalSelectedEdgeId: selectedEdgeId,
+    externalSelectedFormulaId: selectedFormulaId,
+    externalMultiSelectedIds: multiSelectedIds,
+    externalIsLinkMode: isLinkMode,
+    externalLinkFromId: linkFromId,
+  })
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -712,6 +722,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       setSelectedFormulaId(null)
       setSelectedCellId(null)
       setLinkFromId(null)
+      // 同步到 FSM（后续会完全迁移）
+      dispatchFsm({ kind: 'SET_LINK_FROM', linkFromId: null })
       return
     }
 
@@ -735,15 +747,24 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       setSelectedExprToken(null)
     }
 
-    // 重要：单击空白处不再创建节点（改为双击创建）
-
     // 框选：空白处左键按下且无 modifier
     if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current && !draggingCellRef.current) {
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      // 注意：selectionBox 使用 screen(canvas 内像素) 坐标，渲染/命中都由它统一转换
-      selectionStartRef.current = screen
-      setSelectionBox({ start: screen, end: screen })
-      isBoxSelectingRef.current = true
+      const world = screenToWorld(screen, cameraRef.current)
+      dispatchFsm({
+        kind: 'CANVAS_POINTER_DOWN',
+        pointer: {
+          pointerId: e.pointerId,
+          button: e.button,
+          buttons: e.buttons,
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+        },
+        screen,
+        world,
+      })
       return
     }
   }
@@ -851,11 +872,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 框选中
-    if (isBoxSelectingRef.current && selectionStartRef.current) {
+    // 框选中（迁移到 FSM 后，这里只负责把坐标发给 FSM）
+    if (fsm.state.tag === 'boxSelecting') {
       e.preventDefault()
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
-      setSelectionBox((prev) => prev ? { ...prev, end: screen } : null)
+      const world = screenToWorld(screen, cameraRef.current)
+      dispatchFsm({
+        kind: 'CANVAS_POINTER_MOVE',
+        pointer: { pointerId: e.pointerId, buttons: e.buttons },
+        screen,
+        world,
+      })
       return
     }
 
@@ -879,12 +906,18 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 拖拽连线
+    // 拖拽连线（迁移中：pointerWorld 写入 FSM，hover/吸附仍由这里计算）
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
       const world = screenToWorld(screen, cameraRef.current)
       draggingEdgeRef.current.pointerWorld = world
+      dispatchFsm({
+        kind: 'CANVAS_POINTER_MOVE',
+        pointer: { pointerId: e.pointerId, buttons: e.buttons },
+        screen,
+        world,
+      })
 
       const hover = pickNearestPort(world)
       if (hover) {
@@ -903,6 +936,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         draggingEdgeRef.current.toPort = null
         setHoverPort(null)
       }
+
+      // 同步 hover 到 FSM（后续让 FSM 接管 hover 计算）
+      dispatchFsm({ kind: 'HOVER_PORT_SET', hover: hover ?? null })
 
       scheduleRender()
       return
@@ -1008,9 +1044,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (!canvas) return
     e.preventDefault()
 
-    // 框选结束
-    if (isBoxSelectingRef.current && selectionStartRef.current && selectionBox) {
-      isBoxSelectingRef.current = false
+    // 框选结束（迁移到 FSM：由 FSM 清空 selectionBox，并在这里计算命中结果）
+    if (fsm.state.tag === 'boxSelecting' && selectionBox) {
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+      dispatchFsm({
+        kind: 'CANVAS_POINTER_UP_OR_CANCEL',
+        pointer: { pointerId: e.pointerId },
+        screen,
+        world,
+      })
 
       // selectionBox 是 screen 坐标，命中测试前转换为 world 矩形
       const box = screenBoxToWorldBox(selectionBox.start, selectionBox.end)
@@ -1024,8 +1067,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       }
       walk(cells, { x: 0, y: 0 })
       setMultiSelectedIds(selected)
-      setSelectionBox(null)
-      selectionStartRef.current = null
+
       scheduleRender()
       return
     }
@@ -1043,7 +1085,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 结束拖拽连线
+    // 结束拖拽连线（迁移到 FSM：创建连接与写历史从 commands 产出）
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       try {
         canvas.releasePointerCapture(e.pointerId)
@@ -1052,10 +1094,28 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       }
 
       const d = draggingEdgeRef.current
+
+      // 迁移期策略：由外层计算到达的端口，然后交给 FSM 完成收尾。
+      // 这里先把 toId/toPort 作为一次“开始拖拽”后的状态更新来源。
+      // 后续会把 hover/命中计算也挪进 FSM（或抽成纯函数）。
       if (d.toId && d.toPort) {
-        ensureEdge(d.fromId, d.toId, d.fromPort, d.toPort)
-        onHistoryPush({ id: crypto.randomUUID(), label: '创建连接', at: Date.now() }, 'user')
+        // 通过“再发一次 EDGE_DRAG_START + MOVE”在 FSM 内重建 draggingEdge 状态是不合适的；
+        // 这里采用更简单的做法：让 FSM 在 pointerUp 时读取当前 hoverPort（ctx.hoverPort）。
+        // 因此确保 hoverPort 已经是最终值。
+        dispatchFsm({ kind: 'HOVER_PORT_SET', hover: { cellId: d.toId, port: d.toPort } })
+      } else {
+        dispatchFsm({ kind: 'HOVER_PORT_SET', hover: null })
       }
+
+      const screen = getCanvasScreenPoint(canvas, e.clientX, e.clientY)
+      const world = screenToWorld(screen, cameraRef.current)
+
+      dispatchFsm({
+        kind: 'CANVAS_POINTER_UP_OR_CANCEL',
+        pointer: { pointerId: e.pointerId },
+        screen,
+        world,
+      })
 
       draggingEdgeRef.current = null
       setHoverPort(null)
@@ -1353,6 +1413,25 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
