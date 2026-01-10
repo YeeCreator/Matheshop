@@ -64,6 +64,41 @@
 - 文档：更新 `docs/DEVELOPER_GUIDE.md` 2.4.1 章节，列出完整模块清单与职责。
 - 校验：通过 `pnpm lint`、`pnpm typecheck`、`pnpm build`。
 
+### 修复：双击新建节点位置错误 + 触控板双指手势（2026-01-10）
+
+- 修复“双击空白处新建节点总在画布左上角”的问题：
+  - 根节点创建时 `worldPos` 应代表 **中心点 world**（`world`），而不是左上角；左上角偏移由 `localPos = world - size/2` 表达。
+  - 位置相关逻辑在 `src/components/CanvasBoard.tsx` 的 `handleDoubleClick()`。
+- 调整触控板双指/滚轮手势：
+  - 默认 `wheel` -> **平移画布（camera 移动）**，使用 `deltaX/deltaY`。
+  - 仅 `Ctrl/⌘ + wheel` 才执行 **缩放**（以指针位置为中心）；保留 `Shift + wheel` 横向平移。
+  - 统一在 `canvas-wrap` 的原生 `wheel` 监听器中处理（`passive:false`）。
+- 文档：更新 `docs/DEVELOPER_GUIDE.md` 增加 2.4.2，明确坐标语义与手势约定。
+
+### 修复：双击新建仍落在视口左上角 + DEV HUD 默认关闭（2026-01-10）
+
+- 修复坐标换算链路：
+  - `getScreenFromWrap()` 之前错误地用 `wrapRect.width/height` 直接映射到 canvas 像素，
+    但实际画布结构是 **wrap 视口 + 超大 workspace(8000x8000)**。
+  - 现改为：先把 `clientX/Y` 换算到 workspace CSS 坐标（含 `wrap.scrollLeft/Top`），
+    再以 `canvas.getBoundingClientRect()`（≈ workspace CSS 尺寸）映射到 `canvas.width/height`（含 DPR）。
+  - 影响范围：双击创建、拖拽、命中、框选等所有基于 `getScreenFromWrap()` 的交互坐标。
+- 清理误留的调试 UI：
+  - DEV HUD 默认不渲染，仅在 `localStorage['matheshop:devHud']==='1'` 时显示。
+  - HUD 内提供“一键关闭”按钮。
+- 文档：更新 `docs/DEVELOPER_GUIDE.md` 4.0.2/4.4，说明坐标换算与 HUD 开关约定。
+
+### 修复：双击新建节点仍落在视口左上角（坐标系与 cell-layer 定位不一致）（2026-01-10）
+
+- 根因：`CanvasCellLayer` 的 cell DOM 定位使用了 **wrapRect(视口) 的 CSS 尺寸** 进行 screen(px)→css 的换算，
+  而 `CanvasBoard.handleDoubleClick()` 之前使用了 `getScreenFromWrap()` 得到 canvas 像素 screen 再 `screenToWorld()`，
+  两条路径在 workspace(8000x8000)+wrap(视口) 的结构下会出现坐标压缩不一致。
+- 修复：双击创建时改为直接：
+  - `clientX/Y` → workspace 内 `xCss/yCss`（含 `wrap.scrollLeft/Top`）
+  - `world = css/zoom + cam.x/y`
+  使创建坐标与 cell-layer 的 CSS 定位策略保持一致。
+- 校验：通过 `pnpm lint`、`pnpm test`、`pnpm build`。
+
 ## 2026-01-08
 
 ### Python 引擎工程重构：核心库与服务层拆分 + 可观测性增强
@@ -99,3 +134,36 @@
 - 新增 `docs/DEVELOPMENT_LOG.md`：开发日志（本文件）
 - 更新根 `README.md`：补充文档索引（PRD/用户手册/开发者手册/开发日志）
 - 更新 `docs/DEVELOPER_GUIDE.md`：补充文档约定与维护规则、文档入口
+
+## 2026-01-11
+
+### 坐标体系重构：统一到摄影机视口（camera screen px）坐标合同（2026-01-11）
+
+- 目标：所有渲染层/交互层统一遵循同一套坐标合同：
+  - `clientX/Y` → `screen(px)`（基于 wrap.scroll + canvasRect）
+  - `world ↔ screen(px)` 只通过 `screenToWorld/worldToScreen` + `camera{x,y,zoom}`
+  - `screen(px)` → DOM `css` 使用 **canvasRect（workspace CSS 尺寸）** 映射，并减去 `wrap.scrollLeft/Top` 得到视口内定位。
+- 变更点：
+  - `CanvasCellLayer.tsx`：world→screen→workspaceCSS（canvasRect），并减去 wrap scroll。
+  - `EdgeLayer.tsx`：同上，连线不再跟随视口尺寸压缩。
+  - `FormulaLayer.tsx`：同上；拖拽起点坐标也改为 wrap+canvasRect 的 client→screen。
+  - `CanvasBoard.tsx`：双击新建节点回归使用标准 `getScreenFromWrap()` + `screenToWorld()`。
+- 校验：通过 `pnpm lint`、`pnpm test`、`pnpm build`。
+
+### 修复：双击新建节点中心点偏移 + Resize 缩放漂移（2026-01-11）
+
+- 双击新建节点：
+  - 修复体验偏移：新建节点时不再自动移动 camera（之前会造成“节点中心不等于双击点”的视觉错位感）。
+- Resize 缩放：
+  - 修复 resize handle 起点坐标：`CanvasCellResizeHandle` 之前使用 `getCanvasScreenPoint()`，会忽略 wrap 的 scroll/workspace 结构，导致缩放时 worldΔ 错误。
+  - 现改为与 `CanvasBoard.getScreenFromWrap()` 同源的 client→workspaceCSS→canvasPx(screen) 换算，再 `screenToWorld()`。
+  - 缩放模式调整为更直觉的“锚定左上角、右下角随指针变化”，不再使用中心缩放（*2）逻辑。
+- 校验：通过 `pnpm lint`、`pnpm test`、`pnpm build`。
+
+### 调整：Resize 改回中心缩放（2026-01-11）
+
+- 按需求将 resize 从“锚定左上角”改回 **中心缩放**：
+  - `nextSize = startSize + worldΔ * 2`
+  - 并通过 `localPos -= Δsize/2` 保持节点 center(world) 不变。
+- 坐标漂移口径：中心缩放是否漂移取决于 `startWorld` 是否正确；当前 `CanvasCellResizeHandle` 已使用 wrap+scroll 的 client→screen(px) 换算（不再忽略 scroll），因此应消除 resize 时的坐标漂移。
+- 校验：通过 `pnpm lint`、`pnpm test`、`pnpm build`。

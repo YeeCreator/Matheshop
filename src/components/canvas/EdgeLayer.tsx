@@ -32,14 +32,17 @@ export default function EdgeLayer(props: EdgeLayerProps) {
 
   if (!canvasEl || !wrapEl) return null
 
-  const rect = wrapEl.getBoundingClientRect()
+  const canvasRect = canvasEl.getBoundingClientRect()
   const hits = collectCellWorldHits(cells)
 
   const worldToCss = (world: { x: number; y: number }) => {
     const screenPx = worldToScreen(world, camera)
+    const xCssInWorkspace = (screenPx.x / canvasEl.width) * canvasRect.width
+    const yCssInWorkspace = (screenPx.y / canvasEl.height) * canvasRect.height
+
     return {
-      x: (screenPx.x / canvasEl.width) * rect.width,
-      y: (screenPx.y / canvasEl.height) * rect.height,
+      x: xCssInWorkspace - wrapEl.scrollLeft,
+      y: yCssInWorkspace - wrapEl.scrollTop,
     }
   }
 

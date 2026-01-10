@@ -1,6 +1,6 @@
 import katex from 'katex'
 import type React from 'react'
-import { getCanvasScreenPoint, screenToWorld, type Camera, worldToScreen } from './utils/geometry'
+import { screenToWorld, type Camera, worldToScreen } from './utils/geometry'
 
 type FormulaItem = {
   id: string
@@ -28,14 +28,34 @@ export default function FormulaLayer(props: FormulaLayerProps) {
 
   if (!canvasEl || !wrapEl) return null
 
-  const rect = wrapEl.getBoundingClientRect()
+  const canvasRect = canvasEl.getBoundingClientRect()
+  const wrapRect = wrapEl.getBoundingClientRect()
+
+  const clientToScreenPx = (clientX: number, clientY: number) => {
+    const xCssInWorkspace = clientX - wrapRect.left + wrapEl.scrollLeft
+    const yCssInWorkspace = clientY - wrapRect.top + wrapEl.scrollTop
+
+    return {
+      x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
+      y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
+    }
+  }
+
+  const worldToCss = (world: { x: number; y: number }) => {
+    const screenPx = worldToScreen(world, camera)
+    const xCssInWorkspace = (screenPx.x / canvasEl.width) * canvasRect.width
+    const yCssInWorkspace = (screenPx.y / canvasEl.height) * canvasRect.height
+
+    return {
+      left: xCssInWorkspace - wrapEl.scrollLeft,
+      top: yCssInWorkspace - wrapEl.scrollTop,
+    }
+  }
 
   return (
     <div className="formula-layer">
       {formulas.map((f) => {
-        const screenPx = worldToScreen({ x: f.x, y: f.y }, camera)
-        const xCss = (screenPx.x / canvasEl.width) * rect.width
-        const yCss = (screenPx.y / canvasEl.height) * rect.height
+        const css = worldToCss({ x: f.x, y: f.y })
 
         let html = ''
         try {
@@ -54,13 +74,11 @@ export default function FormulaLayer(props: FormulaLayerProps) {
           <div
             key={f.id}
             className={`formula-item${isSelected ? ' is-selected' : ''}`}
-            style={{ left: xCss, top: yCss, color: f.color, fontSize: f.fontSize }}
+            style={{ left: css.left, top: css.top, color: f.color, fontSize: f.fontSize }}
             onPointerDown={(ev: React.PointerEvent<HTMLDivElement>) => {
               // 让公式可交互：阻止事件冒泡到 canvas
               ev.preventDefault()
               ev.stopPropagation()
-
-              if (!canvasEl) return
 
               onSelectFormula(f.id)
 
@@ -69,7 +87,7 @@ export default function FormulaLayer(props: FormulaLayerProps) {
 
               canvasEl.setPointerCapture(ev.pointerId)
 
-              const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+              const screen = clientToScreenPx(ev.clientX, ev.clientY)
               const world = screenToWorld(screen, camera)
 
               onStartDrag({
@@ -86,4 +104,3 @@ export default function FormulaLayer(props: FormulaLayerProps) {
     </div>
   )
 }
-

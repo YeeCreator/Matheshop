@@ -622,20 +622,28 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const selectionStartRef = useRef<null | { x: number; y: number }> (null)
   const isBoxSelectingRef = useRef(false)
 
-  // 基于可滚动容器（canvas-wrap）计算“画布像素坐标”，修复 scroll 后坐标始终落在左上角的问题
+  // 基于可滚动容器（canvas-wrap）计算“画布像素坐标”。
+  // 注意：canvas 的 CSS 宽高通常等于 workspace(8000x8000)；wrap 只是“窗口”。
+  // 因此映射必须以 canvas 的 bounding box 为基准，并叠加 wrap 的 scrollLeft/Top，
+  // 不能用 wrapRect.width/height 直接映射，否则坐标会被压缩到左上角。
   const getScreenFromWrap = useCallback(
     (clientX: number, clientY: number): { x: number; y: number } | null => {
       const canvas = canvasRef.current
       const wrap = wrapRef.current
       if (!canvas || !wrap) return null
 
-      const rect = wrap.getBoundingClientRect()
-      const xInWrap = clientX - rect.left + wrap.scrollLeft
-      const yInWrap = clientY - rect.top + wrap.scrollTop
+      const wrapRect = wrap.getBoundingClientRect()
+      const canvasRect = canvas.getBoundingClientRect()
 
-      // 把 wrap 内的 CSS 坐标映射到 canvas 像素（考虑 DPR）
-      const sx = (xInWrap / rect.width) * canvas.width
-      const sy = (yInWrap / rect.height) * canvas.height
+      // 把 client 坐标先换算到“workspace 内的 CSS 坐标”（考虑 wrap 滚动）
+      const xCssInWorkspace = clientX - wrapRect.left + wrap.scrollLeft
+      const yCssInWorkspace = clientY - wrapRect.top + wrap.scrollTop
+
+      // 然后把 workspace CSS 坐标映射到 canvas 像素坐标（考虑 DPR）
+      // canvasRect.width/height == canvas 的 CSS 尺寸
+      const sx = (xCssInWorkspace / canvasRect.width) * canvas.width
+      const sy = (yCssInWorkspace / canvasRect.height) * canvas.height
+
       return { x: sx, y: sy }
     },
     [],
@@ -819,16 +827,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const size = estimateCellSizeFromText(content)
 
     setCells((prev) => {
-      // 让节点中心对齐到点击点
-      const x = world.x - size.w / 2
-      const y = world.y - size.h / 2
+      // localPos 存的是“左上角（相对父节点）”，而双击 world 是“期望中心点”。
+      // 因此需要把 world.x/y 向左上角偏移 size.w/2 / size.h/2
+      const localX = world.x - size.w / 2
+      const localY = world.y - size.h / 2
 
       const next: CellNode = {
         id,
         parentId: null,
-        localPos: { x, y },
-        // worldPos 需要始终是“世界坐标”，这里新建的是根节点，所以 worldPos 与 localPos 一致
-        worldPos: { x, y },
+        localPos: { x: localX, y: localY },
+        // worldPos 由 recomputeWorldAll 统一重算，这里先保留同语义值作为调试信息
+        worldPos: { x: world.x, y: world.y },
         size,
         kind: 'cell',
         blocks: [],
@@ -837,25 +846,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         seq,
       }
 
-      // 记录，便于调试/聚焦
-      lastCreatedCellRef.current = { id, world: { x, y } }
-
-      // 统一重算 worldPos，避免后续渲染/命中逻辑读到旧值
+      lastCreatedCellRef.current = { id, world: { x: world.x, y: world.y } }
       return recomputeWorldAll([...prev, next])
     })
 
-    // 自动把视口聚焦到新节点附近（避免“创建成功但在视口外”）
-    // 说明：对齐到 cell 左上角附近即可，后续如果要精准对齐中心，可用 size.
-    cameraRef.current = {
-      ...cameraRef.current,
-      x: world.x - 200 / cameraRef.current.zoom,
-      y: world.y - 120 / cameraRef.current.zoom,
-    }
+    // 注意：不要在新建节点时自动移动 camera。
+    // 用户的期望是“我双击的点就是节点中心点”，自动平移会造成视觉上的错位感。
 
     setSelectedCellId(id)
     setEditingCellId(id)
 
-    // 注意：这里不写历史；如果用户最终没输入内容会自动删除，不应留痕
     scheduleRender()
   }
 
@@ -863,17 +863,17 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // 节点缩放（右下角手柄）：以中心为基准的四向缩放
+    // 节点缩放（右下角手柄）：中心缩放（center-anchored）
     if (resizingCellRef.current && resizingCellRef.current.pointerId === e.pointerId) {
       e.preventDefault()
 
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
+      const pointerWorld = screenToWorld(screen, cameraRef.current)
 
       const r = resizingCellRef.current
-      const dx = world.x - r.startWorld.x
-      const dy = world.y - r.startWorld.y
+      const dx = pointerWorld.x - r.startWorld.x
+      const dy = pointerWorld.y - r.startWorld.y
 
       // 右下角拖拽：宽高随 dx/dy 增长；中心缩放 => 总增量乘 2
       let nextW = Math.max(40, r.startSize.w + dx * 2)
@@ -883,7 +883,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       if (e.shiftKey) {
         const aspect = r.aspect > 0 ? r.aspect : 1
         const byW = nextW / aspect
-        // 取更“贴近用户拖动方向”的方案
         if (Math.abs(dy) >= Math.abs(dx)) {
           nextW = nextH * aspect
         } else {
@@ -1232,8 +1231,12 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
       const cam = cameraRef.current
 
-      // Shift + wheel：横向平移（与 React handler 保持一致）
-      if (ev.shiftKey && !ev.ctrlKey && !ev.metaKey) {
+      // 触控板双指/滚轮：默认应该是“平移”。
+      // 只有 Ctrl/⌘+Wheel 才执行缩放（macOS 常见是 pinch -> wheel + ctrlKey=true）。
+      const isZoomGesture = ev.ctrlKey || ev.metaKey
+
+      // Shift + wheel：横向平移（保持历史行为）
+      if (ev.shiftKey && !isZoomGesture) {
         cameraRef.current = {
           ...cam,
           x: cam.x + ev.deltaY / cam.zoom,
@@ -1242,7 +1245,18 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         return
       }
 
-      // 缩放（以鼠标位置为中心）
+      // 平移（默认）：deltaX/deltaY 分别对应横/纵向移动；方向与手势保持一致
+      if (!isZoomGesture) {
+        cameraRef.current = {
+          ...cam,
+          x: cam.x + ev.deltaX / cam.zoom,
+          y: cam.y + ev.deltaY / cam.zoom,
+        }
+        scheduleRender()
+        return
+      }
+
+      // 缩放（以鼠标/手指位置为中心）
       const screen = getScreenFromWrap(ev.clientX, ev.clientY)
       if (!screen) return
       const worldBefore = screenToWorld(screen, cam)
@@ -1276,7 +1290,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   }
 
   const renderDevHud = () => {
+    // 调试 HUD 默认关闭，避免开发时误留 UI 污染。
+    // 如需打开：在控制台执行 `localStorage.setItem('matheshop:devHud','1')` 然后刷新。
     if (!import.meta.env.DEV) return null
+    if (typeof window === 'undefined') return null
+    if (window.localStorage.getItem('matheshop:devHud') !== '1') return null
 
     const last = lastCreatedCellRef.current
     return (
@@ -1318,6 +1336,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           }}
         >
           聚焦到最后节点
+        </button>
+        <button
+          type="button"
+          style={{ marginTop: 6, marginLeft: 8 }}
+          onClick={() => {
+            window.localStorage.removeItem('matheshop:devHud')
+            scheduleRender()
+          }}
+        >
+          关闭 HUD
         </button>
       </div>
     )
@@ -1473,15 +1501,23 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             const wrap = wrapRef.current
             if (!canvas || !wrap) return null
 
-            // selectionBox 是 canvas 内像素；需要映射到 wrap CSS 像素
-            const rect = wrap.getBoundingClientRect()
-            const pxToCssX = rect.width / canvas.width
-            const pxToCssY = rect.height / canvas.height
+            const canvasRect = canvas.getBoundingClientRect()
 
-            const left = Math.min(selectionBox.start.x, selectionBox.end.x) * pxToCssX
-            const top = Math.min(selectionBox.start.y, selectionBox.end.y) * pxToCssY
-            const width = Math.abs(selectionBox.start.x - selectionBox.end.x) * pxToCssX
-            const height = Math.abs(selectionBox.start.y - selectionBox.end.y) * pxToCssY
+            // selectionBox 是 canvas 内像素坐标；需要映射到 workspace CSS 坐标。
+            // 注意：canvasRect 的 CSS 尺寸 ≈ workspace（8000x8000），wrapRect 只是视口。
+            // 因此必须用 canvasRect.width/height 来做像素->CSS 的比例换算。
+            const pxToCssX = canvasRect.width / canvas.width
+            const pxToCssY = canvasRect.height / canvas.height
+
+            const leftCssInWorkspace = Math.min(selectionBox.start.x, selectionBox.end.x) * pxToCssX
+            const topCssInWorkspace = Math.min(selectionBox.start.y, selectionBox.end.y) * pxToCssY
+            const widthCss = Math.abs(selectionBox.start.x - selectionBox.end.x) * pxToCssX
+            const heightCss = Math.abs(selectionBox.start.y - selectionBox.end.y) * pxToCssY
+
+            // overlay 是放在 canvas-workspace（position:relative）里。
+            // 需要把 workspace CSS 坐标减去当前滚动量，变成“视口内的绝对定位”。
+            const left = leftCssInWorkspace - wrap.scrollLeft
+            const top = topCssInWorkspace - wrap.scrollTop
 
             return (
               <div
@@ -1490,8 +1526,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   position: 'absolute',
                   left,
                   top,
-                  width,
-                  height,
+                  width: widthCss,
+                  height: heightCss,
                   background: 'rgba(0,120,255,0.12)',
                   border: '1.5px solid #1890ff',
                   pointerEvents: 'none',
@@ -1512,6 +1548,21 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

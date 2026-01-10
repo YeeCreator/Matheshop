@@ -498,6 +498,59 @@ engine/
 - 缩放手势与范围：`CanvasBoard.tsx` 的 `handleWheel`（clamp：0.08~64）
 - 坐标换算：`src/components/canvas/utils/geometry.ts`
 
+#### 4.0.2 事件坐标换算（wrap 滚动 + workspace 尺寸，重要）
+
+当前画布结构是：
+
+- `canvas-wrap`：一个可滚动的“视口容器”（用户看到的是它的可视区域）
+- `canvas-workspace`：一个很大的内容层（例如 8000x8000），用于產生滚动条
+- `<canvas class="canvas" />`：CSS 尺寸跟随 workspace（宽高 100%）
+
+因此从 DOM `clientX/clientY` 换算到 **canvas 像素坐标** 时，必须：
+
+1) 用 `wrap.getBoundingClientRect()` 把 client 坐标转换到 **workspace 内的 CSS 坐标**，并叠加 `wrap.scrollLeft/scrollTop`
+2) 再用 `canvas.getBoundingClientRect()`（注意：这是 canvas 的 CSS 尺寸，≈ workspace）把 CSS 坐标映射到 `canvas.width/canvas.height`（像素，含 DPR）
+
+如果误用 `wrapRect.width/height` 直接去映射，会把坐标压缩到左上角，表现为：
+
+- 双击创建节点总在视口左上角
+- 拖拽/命中/框选坐标整体偏移
+
+对应实现：`CanvasBoard.tsx` 的 `getScreenFromWrap()`。
+
+#### 4.0.3 （现状）DOM 叠加层（Cell/Edge/Formula）的统一坐标合同
+
+当前画布采用“canvas 画背景 + DOM 叠加层渲染交互元素”的混合方案。
+为了避免出现“节点/连线/公式各用各的坐标系”的错位问题，统一约定如下：
+
+- 交互输入：
+  - `clientX/Y` → `screen(px)`：使用 `wrap.getBoundingClientRect()` + `wrap.scrollLeft/Top` 得到 workspace CSS 坐标，
+    再用 `canvas.getBoundingClientRect()` 把 workspace CSS 映射到 `canvas.width/height`（含 DPR）。
+  - `screen(px)` → `world`：只通过 `screenToWorld(screen, camera)`。
+- 渲染输出（DOM 叠加层定位）：
+  - `world` → `screen(px)`：只通过 `worldToScreen(world, camera)`。
+  - `screen(px)` → `css(px)`：使用 `canvasRect`（workspace 的 CSS 尺寸）做像素到 CSS 的比例映射，
+    再减去 `wrap.scrollLeft/Top` 得到“视口内定位”。（因为 wrap 会滚动）
+
+落实在代码中：
+
+- `CanvasBoard.tsx`：交互入口、`getScreenFromWrap()`、双击创建等
+- `canvas/cells/CanvasCellLayer.tsx`：cell DOM 定位
+- `canvas/EdgeLayer.tsx`：连线 SVG 定位
+- `canvas/FormulaLayer.tsx`：公式 DOM 定位
+
+> 注意：不要再用 `wrapRect.width/height` 直接去映射 `canvas.width/height`；wrap 只是视口，会把坐标压缩到左上角。
+
+#### 4.4 调试 HUD（DEV overlay）
+
+仓库历史上为了排查坐标/命中问题，提供过一个简单的 DEV HUD（黑底文本）。
+
+约定：
+
+- **默认关闭**，避免开发环境误留 UI 污染。
+- 如需打开：在浏览器控制台执行 `localStorage.setItem('matheshop:devHud','1')` 后刷新。
+- 关闭：`localStorage.removeItem('matheshop:devHud')` 或点 HUD 内“关闭 HUD”。
+
 ### 4.1 核心状态（建议理解顺序）
 
 - 相机：`cameraRef`
@@ -577,3 +630,54 @@ pnpm build
     - `HTTP 500`：后端运行时报错（查看后端终端或 `engine/SymbolicComputationEngineServer/logs/server.log`）
 - DevTools -> Console
   - 若 fetch 失败，通常能看到浏览器级别的网络错误（DNS/连接拒绝/CORS 等）
+
+## 2.4.2 Canvas 交互：双击新建节点与触控板手势约定（2026-01-10）
+
+### A. 双击空白处新建节点：坐标语义
+
+当用户在画布空白处双击创建根节点（`parentId: null`）时：
+
+- **双击点换算得到的 `world` 语义是“用户期望的节点中心点”**。
+- `CellNode.localPos` 语义是“节点左上角相对父节点（world）的位置”。
+- `CellNode.worldPos` 语义是“节点中心点的 world 坐标”（用于 world→screen 定位）。
+
+因此根节点创建时应满足：
+
+- `localPos = { x: world.x - size.w/2, y: world.y - size.h/2 }`
+- `worldPos = world`
+
+> 注意：不要把 `worldPos` 写成左上角坐标（`localPos`），否则视觉定位与命中测试会出现偏移，表现为“新建节点总在画布左上角/不在点击处”。
+
+### B. 触控板双指/滚轮手势：默认平移，Ctrl/⌘+wheel 才缩放
+
+画布的 wheel 行为约定如下（在 `canvas-wrap` 上以原生 `wheel` 监听器统一处理，`passive:false`）：
+
+- **默认**（无 Ctrl/⌘）：将 wheel 解释为 **平移**（camera 移动）
+  - `camera.x += deltaX / zoom`
+  - `camera.y += deltaY / zoom`
+- `Shift + wheel`：横向平移（兼容一些鼠标设备只有纵向滚轮的情况）
+  - `camera.x += deltaY / zoom`
+- `Ctrl/⌘ + wheel`：以指针位置为中心进行 **缩放**（macOS pinch 常见会触发 `ctrlKey=true`）
+
+> 目标体验：触控板双指移动应当像“拖拽画布”一样平移；缩放是一个显式手势（pinch 或 Ctrl/⌘+wheel）。
+
+## 4.0.4 Resize（缩放手柄）坐标换算与行为约定
+
+缩放手柄的 pointerdown/move 必须使用与画布交互相同的坐标换算链路。
+
+- ❌ 不要使用 `getCanvasScreenPoint(canvas, clientX, clientY)`：它使用 `canvas.getBoundingClientRect()` 直接减 `left/top` 的方式，
+  在当前 `wrap(scroll) + workspace(超大) + canvas(随 workspace)` 的结构下会忽略 `wrap.scrollLeft/Top`，导致缩放时 worldΔ 漂移。
+- ✅ 正确方式：复用 `CanvasBoard.getScreenFromWrap()` 的思路：
+  - `clientX/Y` → workspace CSS（含 `wrap.scrollLeft/Top`）
+  - workspace CSS → canvas 像素 screen(px)（通过 `canvasRect` 映射到 `canvas.width/height`）
+  - `screenToWorld(screen, camera)`
+
+当前缩放行为约定：
+
+- 右下角手柄拖拽采用 **中心缩放（center-anchored）** 模式：保持节点中心点 world 不变，尺寸随拖拽增减。
+- `Shift`：锁定宽高比。
+
+对应实现：
+
+- 入口：`src/components/canvas/cells/CanvasCellResizeHandle.tsx`
+- move：`src/components/CanvasBoard.tsx` 的 `handlePointerMove`（`resizingCellRef` 分支）。

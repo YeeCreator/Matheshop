@@ -1,7 +1,7 @@
 import React from 'react'
 import type { CellNode } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'
-import { getCanvasScreenPoint, screenToWorld } from '../utils/geometry'
+import { screenToWorld } from '../utils/geometry'
 
 export type CanvasCellResizeHandleProps = {
   cell: CellNode
@@ -38,8 +38,25 @@ export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProp
         const canvasEl = canvasRefForPointerCapture.current
         if (!canvasEl) return
 
+        const wrap = canvasEl.parentElement?.parentElement as HTMLDivElement | null
+        // 结构约定：canvasEl 在 `.canvas-workspace` 内，而 workspace 在 `.canvas-wrap` 内。
+        // 这里不依赖 className，只按当前 DOM 层级取 wrap；若未来结构调整，应把 wrapEl 作为显式 prop 传入。
+
+        if (!wrap) return
+
         canvasEl.setPointerCapture(ev.pointerId)
-        const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+
+        const wrapRect = wrap.getBoundingClientRect()
+        const canvasRect = canvasEl.getBoundingClientRect()
+
+        const xCssInWorkspace = ev.clientX - wrapRect.left + wrap.scrollLeft
+        const yCssInWorkspace = ev.clientY - wrapRect.top + wrap.scrollTop
+
+        const screen = {
+          x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
+          y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
+        }
+
         const world = screenToWorld(screen, camera)
 
         resizingCellRef.current = {
@@ -54,4 +71,3 @@ export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProp
     />
   )
 }
-

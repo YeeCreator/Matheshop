@@ -140,14 +140,25 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
 
   const content = (() => {
     if (!canvasEl || !wrapEl) return null
-    const rect = wrapEl.getBoundingClientRect()
+
+    const canvasRect = canvasEl.getBoundingClientRect()
+
+    const worldToCss = (world: { x: number; y: number }) => {
+      const screenPx = worldToScreen(world, camera)
+      const xCssInWorkspace = (screenPx.x / canvasEl.width) * canvasRect.width
+      const yCssInWorkspace = (screenPx.y / canvasEl.height) * canvasRect.height
+
+      // cell-layer 渲染在 workspace 内（且 wrap 可滚动），这里把 workspace 坐标转换为视口内坐标
+      return {
+        left: xCssInWorkspace - wrapEl.scrollLeft,
+        top: yCssInWorkspace - wrapEl.scrollTop,
+      }
+    }
 
     const renderCell = (c: CellNode, depth: number, parentWorld: { x: number; y: number }) => {
       const worldNow = { x: parentWorld.x + c.localPos.x, y: parentWorld.y + c.localPos.y }
 
-      const screenPx = worldToScreen(worldNow, camera)
-      const xCss = (screenPx.x / canvasEl.width) * rect.width
-      const yCss = (screenPx.y / canvasEl.height) * rect.height
+      const css = worldToCss(worldNow)
 
       const isSelected = selectedCellId === c.id
       const isEditing = editingCellId === c.id
@@ -160,7 +171,7 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
           key={c.id}
           cell={c}
           depth={depth}
-          cssRect={{ left: xCss, top: yCss }}
+          cssRect={{ left: css.left, top: css.top }}
           parentWorld={parentWorld}
           worldNow={worldNow}
           camera={camera}
