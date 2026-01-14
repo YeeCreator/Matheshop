@@ -727,3 +727,12 @@ pnpm build
 
 - 入口：`src/components/canvas/cells/CanvasCellResizeHandle.tsx`
 - move：`src/components/CanvasBoard.tsx` 的 `handlePointerMove`（`resizingCellRef` 分支）。
+
+## 画布交互：节点创建与编辑提交（重要行为约定）
+
+- 双击画布创建节点后会立即进入编辑态。
+- 当用户在编辑态下点击空白处/切换焦点导致“提交编辑”时：
+  - **若内容为空**：只会退出编辑态并保留节点（不再自动删除），避免出现“刚创建就消失”的体验。
+  - **若内容非空**：会退出编辑态，并根据最终内容估算尺寸、解析 blocks 并写入历史记录。
+
+> 备注：如果后续需要“空内容自动删除”的模式，可以引入显式的删除操作（例如 Backspace/Delete 或右键菜单），而不是在提交时隐式删除。

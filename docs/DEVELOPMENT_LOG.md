@@ -178,3 +178,8 @@
   - 将 `handleCellPointerDownForDrag` 放到 `dispatchFsm` 可用之后，避免闭包变量在声明前引用。
 - 文档：更新 `docs/DEVELOPER_GUIDE.md`，补充“Canvas 交互 FSM（状态机）”章节，明确哪些交互应纳入 FSM、哪些 UI 操作保持在 UI 层。
 - 校验：通过 `pnpm build`、`pnpm test`。
+
+## 2026-01-15
+
+- 修复：双击新建节点后若未输入内容就点击空白处，节点会被当作“空内容提交”而删除，导致“刚创建就消失”。现在空内容提交只退出编辑态并保留节点。
+- 修复/改进：节点 resize 采用 world 中心锚定，FSM resize command 直接设置 `localPos`（避免 delta 叠加漂移），并在 cell 更新后重算 `worldPos`（`recomputeWorldAll`）保持渲染与命中一致。

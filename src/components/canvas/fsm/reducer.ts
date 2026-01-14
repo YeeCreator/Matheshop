@@ -298,11 +298,17 @@ export function canvasFsmStep(
       const dxFromCenter = ev.world.x - center.x
       const dyFromCenter = ev.world.y - center.y
 
-      let nextW = Math.max(40, Math.abs(dxFromCenter) * 2)
-      let nextH = Math.max(28, Math.abs(dyFromCenter) * 2)
+      // 以开始尺寸为基准做增量（避免越过中心点时 abs() 造成尺寸瞬间塌缩到 min）
+      let nextW = state.startSize.w + dxFromCenter * 2
+      let nextH = state.startSize.h + dyFromCenter * 2
+
+      // clamp（保持正尺寸）
+      nextW = Math.max(40, nextW)
+      nextH = Math.max(28, nextH)
 
       if (ev.shiftKey) {
         const aspect = state.aspect > 0 ? state.aspect : 1
+        // 保持“以增量更大的方向为主”更符合手感
         if (Math.abs(dyFromCenter) >= Math.abs(dxFromCenter)) {
           nextW = nextH * aspect
         } else {
@@ -310,7 +316,6 @@ export function canvasFsmStep(
         }
       }
 
-      // world 中心锚定：topLeft(world) = center - size/2
       const nextLocalPos = { x: center.x - nextW / 2, y: center.y - nextH / 2 }
 
       commands.push({

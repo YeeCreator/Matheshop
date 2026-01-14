@@ -195,11 +195,13 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
       const trimmed = (latestText ?? '').trim()
 
-      // 空内容：视为“新建无效/删除节点”
+      // 空内容：
+      // 以前的策略是“删除节点”。但双击新建后用户很可能先点空白处/切走，
+      // 这会导致节点“刚创建就消失”，体验很差。
+      // 现在改为：如果是空内容，只退出编辑态并保留节点。
       if (trimmed.length === 0) {
         setEditingCellId(null)
-        setSelectedCellId((cur) => (cur === cellId ? null : cur))
-        setCells((prev) => removeCellById(prev, cellId).next)
+        setSelectedCellId((cur) => (cur === cellId ? cur : cur))
         scheduleRender()
         return
       }
@@ -1261,7 +1263,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             canvasRefForPointerCapture={canvasRef}
             dragStartTimerRef={dragStartTimerRef}
             draggingCellPointerDown={handleCellPointerDownForDrag}
-            onResizeStart={(args) => {
+            onResizeStart={(args: Parameters<NonNullable<React.ComponentProps<typeof CanvasCellLayer>['onResizeStart']>>[0]) => {
               // 进入 resize 状态由 FSM 接管：startCenterWorld 必须是真实 cell center(world)
               dispatchFsm({
                 kind: 'CELL_RESIZE_START',
