@@ -167,3 +167,14 @@
   - 并通过 `localPos -= Δsize/2` 保持节点 center(world) 不变。
 - 坐标漂移口径：中心缩放是否漂移取决于 `startWorld` 是否正确；当前 `CanvasCellResizeHandle` 已使用 wrap+scroll 的 client→screen(px) 换算（不再忽略 scroll），因此应消除 resize 时的坐标漂移。
 - 校验：通过 `pnpm lint`、`pnpm test`、`pnpm build`。
+
+## 2026-01-14
+
+### 前端修复：Canvas FSM 去重与画布交互收敛
+
+- 修复 `src/components/CanvasBoard.tsx` 因 FSM 渐进迁移时产生的重复声明/声明顺序问题：
+  - 收敛为 **单一** `applyFsmCommands` / `useCanvasFsm` 初始化点。
+  - 统一由 `applyFsmCommands` 落地 FSM commands（selection box、hover port、ensure edge、camera、pointer capture、cell move/resize、history）。
+  - 将 `handleCellPointerDownForDrag` 放到 `dispatchFsm` 可用之后，避免闭包变量在声明前引用。
+- 文档：更新 `docs/DEVELOPER_GUIDE.md`，补充“Canvas 交互 FSM（状态机）”章节，明确哪些交互应纳入 FSM、哪些 UI 操作保持在 UI 层。
+- 校验：通过 `pnpm build`、`pnpm test`。

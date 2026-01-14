@@ -1,7 +1,7 @@
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'
-import { getCanvasScreenPoint, screenToWorld } from '../utils/geometry'
+import { screenToWorld } from '../utils/geometry'
 import CanvasCellPorts from './CanvasCellPorts'
 import CanvasCellResizeHandle from './CanvasCellResizeHandle'
 import CanvasCellBody from './CanvasCellBody'
@@ -109,6 +109,16 @@ export type CanvasCellProps = {
   renderChild: (child: CellNode, depth: number, parentWorld: { x: number; y: number }) => React.ReactNode
 
   onToggleCollapse?: (cellId: CellId) => void
+
+  /** 渐进迁移：由上层 FSM 接管 resize */
+  onResizeStart?: (args: {
+    pointerId: number
+    cellId: string
+    startWorld: { x: number; y: number }
+    startSize: { w: number; h: number }
+    aspect: number
+    startCenterWorld: { x: number; y: number }
+  }) => void
 }
 
 export default function CanvasCell(props: CanvasCellProps) {
@@ -153,6 +163,30 @@ export default function CanvasCell(props: CanvasCellProps) {
     renderChild,
     onToggleCollapse,
   } = props
+
+  // 统一坐标换算：client -> canvas screen(px)（考虑 wrap.scroll + workspace/canvasRect）
+  const getScreenFromWrap = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    const canvasEl = canvasRefForPointerCapture.current
+    const wrap = wrapEl
+    if (!canvasEl || !wrap) return null
+
+    const wrapRect = wrap.getBoundingClientRect()
+    const canvasRect = canvasEl.getBoundingClientRect()
+
+    const xCssInWorkspace = clientX - wrapRect.left + wrap.scrollLeft
+    const yCssInWorkspace = clientY - wrapRect.top + wrap.scrollTop
+
+    return {
+      x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
+      y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
+    }
+  }
+
+  // cell 当前中心点 world（用于中心缩放锚点）
+  const cellCenterWorld = {
+    x: worldNow.x + c.size.w / 2,
+    y: worldNow.y + c.size.h / 2,
+  }
 
   return (
     <div
@@ -200,10 +234,8 @@ export default function CanvasCell(props: CanvasCellProps) {
           dragStartTimerRef.current = null
         }
 
-        const canvasEl = canvasRefForPointerCapture.current
-        if (!canvasEl) return
-
-        const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+        const screen = getScreenFromWrap(ev.clientX, ev.clientY)
+        if (!screen) return
         const world = screenToWorld(screen, camera)
 
         draggingCellPointerDown({ ev, cell: c, parentWorld, screen, world })
@@ -225,6 +257,7 @@ export default function CanvasCell(props: CanvasCellProps) {
         cellSize={c.size}
         camera={camera}
         canvasRefForPointerCapture={canvasRefForPointerCapture}
+        wrapEl={wrapEl}
         hoverPort={hoverPort}
         setHoverPort={setHoverPort}
         draggingEdgeRef={draggingEdgeRef}
@@ -237,6 +270,9 @@ export default function CanvasCell(props: CanvasCellProps) {
         camera={camera}
         canvasRefForPointerCapture={canvasRefForPointerCapture}
         resizingCellRef={resizingCellRef}
+        onResizeStart={props.onResizeStart}
+        wrapEl={wrapEl}
+        startCenterWorld={cellCenterWorld}
       />
 
       {isSelected && (

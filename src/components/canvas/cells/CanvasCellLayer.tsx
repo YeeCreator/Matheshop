@@ -102,6 +102,15 @@ export type CanvasCellLayerProps = {
 
   dragStartTimerRef: React.MutableRefObject<number | null>
   draggingCellPointerDown: (args: { ev: React.PointerEvent; cell: CellNode; parentWorld: { x: number; y: number }; screen: { x: number; y: number }; world: { x: number; y: number } }) => void
+
+  onResizeStart?: (args: {
+    pointerId: number
+    cellId: string
+    startWorld: { x: number; y: number }
+    startSize: { w: number; h: number }
+    aspect: number
+    startCenterWorld: { x: number; y: number }
+  }) => void
 }
 
 export default function CanvasCellLayer(props: CanvasCellLayerProps) {
@@ -136,6 +145,7 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
     canvasRefForPointerCapture,
     dragStartTimerRef,
     draggingCellPointerDown,
+    onResizeStart,
   } = props
 
   const content = (() => {
@@ -211,6 +221,7 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
             scheduleRender()
           }}
           renderChild={(child, nextDepth, nextParentWorld) => renderCell(child, nextDepth, nextParentWorld)}
+          onResizeStart={onResizeStart}
         />
       )
     }

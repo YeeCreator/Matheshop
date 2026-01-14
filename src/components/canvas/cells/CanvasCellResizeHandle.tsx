@@ -20,10 +20,26 @@ export type CanvasCellResizeHandleProps = {
         aspect: number
       }
   >
+
+  /** 渐进迁移：由上层接管 resize 的状态机（FSM） */
+  onResizeStart?: (args: {
+    pointerId: number
+    cellId: string
+    startWorld: { x: number; y: number }
+    startSize: { w: number; h: number }
+    aspect: number
+    startCenterWorld: { x: number; y: number }
+  }) => void
+
+  /** 画布视口容器（用于正确的坐标换算） */
+  wrapEl: HTMLDivElement | null
+
+  /** cell 中心点 world（由上层 CanvasCell 计算传入） */
+  startCenterWorld: { x: number; y: number }
 }
 
 export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProps) {
-  const { cell, isVisible, camera, canvasRefForPointerCapture, resizingCellRef } = props
+  const { cell, isVisible, camera, canvasRefForPointerCapture, resizingCellRef, onResizeStart, wrapEl, startCenterWorld } = props
 
   if (!isVisible) return null
 
@@ -36,15 +52,8 @@ export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProp
         ev.stopPropagation()
 
         const canvasEl = canvasRefForPointerCapture.current
-        if (!canvasEl) return
-
-        const wrap = canvasEl.parentElement?.parentElement as HTMLDivElement | null
-        // 结构约定：canvasEl 在 `.canvas-workspace` 内，而 workspace 在 `.canvas-wrap` 内。
-        // 这里不依赖 className，只按当前 DOM 层级取 wrap；若未来结构调整，应把 wrapEl 作为显式 prop 传入。
-
-        if (!wrap) return
-
-        canvasEl.setPointerCapture(ev.pointerId)
+        const wrap = wrapEl
+        if (!canvasEl || !wrap) return
 
         const wrapRect = wrap.getBoundingClientRect()
         const canvasRect = canvasEl.getBoundingClientRect()
@@ -58,6 +67,24 @@ export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProp
         }
 
         const world = screenToWorld(screen, camera)
+
+        const payload = {
+          pointerId: ev.pointerId,
+          cellId: cell.id,
+          startWorld: world,
+          startSize: { ...cell.size },
+          aspect: cell.size.w / Math.max(1, cell.size.h),
+          startCenterWorld,
+        }
+
+        // 已迁移：交给上层 FSM
+        if (onResizeStart) {
+          onResizeStart(payload)
+          return
+        }
+
+        // 兼容：未传入回调时，保持旧逻辑
+        canvasEl.setPointerCapture(ev.pointerId)
 
         resizingCellRef.current = {
           id: cell.id,

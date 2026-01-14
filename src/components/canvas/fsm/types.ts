@@ -17,6 +17,8 @@ export type CanvasPointer = {
 export type ScreenPoint = { x: number; y: number }
 export type WorldPoint = { x: number; y: number }
 
+export type LocalPoint = { x: number; y: number }
+
 export type HoverPort = { cellId: CellId; port: PortSide }
 
 export type InteractionModeFlags = {
@@ -50,6 +52,34 @@ export type CanvasInteractionState =
   | { tag: 'idle' }
   | { tag: 'boxSelecting'; start: ScreenPoint }
   | {
+      tag: 'panningViewport'
+      pointerId: number
+      startScreen: ScreenPoint
+      startCam: Camera
+    }
+  | {
+      tag: 'draggingCell'
+      pointerId: number
+      cellId: CellId
+      startWorld: WorldPoint
+      startScreen: ScreenPoint
+      startPos: LocalPoint
+      heldReady: boolean
+      movedReady: boolean
+      isDragging: boolean
+      didMove: boolean
+    }
+  | {
+      tag: 'resizingCell'
+      pointerId: number
+      cellId: CellId
+      startWorld: WorldPoint
+      startSize: { w: number; h: number }
+      aspect: number
+      /** 固定中心锚点（world），用于中心对称缩放 */
+      startCenterWorld: WorldPoint
+    }
+  | {
       tag: 'draggingEdge'
       pointerId: number
       fromId: CellId
@@ -79,6 +109,60 @@ export type CanvasInteractionEvent =
       world: WorldPoint
     }
   | {
+      kind: 'VIEWPORT_PAN_START'
+      pointerId: number
+      startScreen: ScreenPoint
+      startCam: Camera
+    }
+  | {
+      kind: 'VIEWPORT_PAN_MOVE'
+      pointerId: number
+      screen: ScreenPoint
+    }
+  | { kind: 'VIEWPORT_PAN_END'; pointerId: number }
+  | {
+      kind: 'VIEWPORT_WHEEL'
+      screen: ScreenPoint
+      deltaX: number
+      deltaY: number
+      shiftKey: boolean
+      ctrlKey: boolean
+      metaKey: boolean
+    }
+  | {
+      kind: 'CELL_DRAG_ARM'
+      pointerId: number
+      cellId: CellId
+      startWorld: WorldPoint
+      startScreen: ScreenPoint
+      startPos: LocalPoint
+    }
+  | { kind: 'CELL_DRAG_HOLD_READY'; pointerId: number }
+  | {
+      kind: 'CELL_DRAG_MOVE'
+      pointerId: number
+      screen: ScreenPoint
+      world: WorldPoint
+    }
+  | { kind: 'CELL_DRAG_END'; pointerId: number }
+  | {
+      kind: 'CELL_RESIZE_START'
+      pointerId: number
+      cellId: CellId
+      startWorld: WorldPoint
+      startSize: { w: number; h: number }
+      aspect: number
+      /** 固定中心锚点（world）。由 UI 层在 resize 开始时计算并传入 */
+      startCenterWorld: WorldPoint
+    }
+  | {
+      kind: 'CELL_RESIZE_MOVE'
+      pointerId: number
+      world: WorldPoint
+      shiftKey: boolean
+    }
+  | { kind: 'CELL_RESIZE_END'; pointerId: number }
+  | {
       kind: 'SET_LINK_MODE'
       isLinkMode: boolean
     }
@@ -100,4 +184,17 @@ export type CanvasFsmCommand =
   | { kind: 'SET_SELECTION_BOX'; box: null | { start: ScreenPoint; end: ScreenPoint } }
   | { kind: 'SET_HOVER_PORT'; hover: HoverPort | null }
   | { kind: 'ENSURE_EDGE'; fromId: CellId; toId: CellId; fromPort?: PortSide; toPort?: PortSide }
+  | { kind: 'SET_CAMERA'; camera: Camera }
+  | { kind: 'CAPTURE_POINTER'; pointerId: number }
+  | { kind: 'RELEASE_POINTER'; pointerId: number }
+  | { kind: 'CLEAR_DROP_HINT' }
+  | { kind: 'UPDATE_CELL_POS'; cellId: CellId; localPos: LocalPoint }
+  | {
+      kind: 'UPDATE_CELL_SIZE_CENTER_ANCHORED'
+      cellId: CellId
+      size: { w: number; h: number }
+      /** resize 以世界坐标中心锚定后，直接计算得到新的 localPos（左上角，相对 parent） */
+      localPos: LocalPoint
+    }
   | { kind: 'PUSH_HISTORY'; label: string }
+

@@ -390,6 +390,52 @@ pnpm desktop:dist
 - Electron 会自己启动 Vite（脚本里用 concurrently）
 - 这种方式最省心，但你就不需要再单独点 `pnpm dev`
 
+## 2.4.5 Canvas 交互 FSM（状态机）
+
+Matheshop 的 Canvas 交互（pointer/keyboard 驱动的“连续手势”）正在逐步迁移到 FSM（Finite State Machine）中，以便：
+
+- 明确区分“视口操作 vs 节点操作 vs 连线操作”
+- 避免多处 handler 交叉修改同一份 state 导致的竞态
+- 让复杂手势（框选、hover 吸附、拖拽阈值、指针捕获等）可测试/可演进
+
+### 2.4.5.1 纳入 FSM 的范围（建议/已执行）
+
+适合纳入 FSM 的标准：
+
+- 由 **pointer 手势** 或 **键盘 + pointer 组合** 驱动
+- 具有明确的“开始/进行/结束/取消”生命周期
+- 需要处理 pointer capture、hover、阈值（hold）、或多实体协同（例如连线吸附）
+
+目前（或建议）纳入 FSM 的内容：
+
+- 视口（Viewport）
+  - 平移：中键拖拽/空格+拖拽
+  - 滚轮：缩放（ctrl/⌘+wheel）与滚动
+- 节点（Cell）
+  - 拖拽移动（含 hold-ready 阈值）
+  - 缩放（resize handle）
+  - 框选（box selection）
+- 连线（Edge）
+  - hover port 与吸附逻辑（部分仍在迁移中）
+  - 松开时创建连接（通过 FSM command `ENSURE_EDGE` 落地）
+
+### 2.4.5.2 不需要纳入 FSM 的范围（保持 UI 层处理）
+
+不满足“连续手势”特征、或本质是一次性 UI 行为的操作，一般不纳入 FSM：
+
+- 菜单点击、按钮点击、设置项切换（典型是一次性 onClick/onChange）
+- Modal/Panel 打开关闭
+- 纯展示态的 hover/tooltip（不影响手势状态机）
+
+> 例外：如果某个 UI 行为会影响 Canvas 的手势解释（例如切换工具/模式），可以视为 FSM 的 **外部输入**（external state），通过 `useCanvasFsm` 的 external 字段注入。
+
+### 2.4.5.3 入口文件
+
+- FSM 类型与 Command：`src/components/canvas/fsm/types.ts`
+- FSM reducer：`src/components/canvas/fsm/reducer.ts`
+- React 侧接入：`src/components/canvas/fsm/useCanvasFsm.ts`
+- 画布事件转发/命令落地：`src/components/CanvasBoard.tsx`
+
 ## 3. 目录结构与职责边界
 
 ```

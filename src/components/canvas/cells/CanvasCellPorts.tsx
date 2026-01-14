@@ -1,7 +1,7 @@
 import React from 'react'
 import type { CellId, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'
-import { getCanvasScreenPoint, screenToWorld } from '../utils/geometry'
+import { screenToWorld } from '../utils/geometry'
 
 export type CanvasCellPortsProps = {
   cellId: CellId
@@ -9,6 +9,8 @@ export type CanvasCellPortsProps = {
 
   camera: Camera
   canvasRefForPointerCapture: React.MutableRefObject<HTMLCanvasElement | null>
+  /** 画布视口容器（用于正确的坐标换算） */
+  wrapEl: HTMLDivElement | null
 
   hoverPort: null | { cellId: CellId; port: PortSide }
   setHoverPort: (v: null | { cellId: CellId; port: PortSide }) => void
@@ -34,11 +36,29 @@ export default function CanvasCellPorts(props: CanvasCellPortsProps) {
     cellSize,
     camera,
     canvasRefForPointerCapture,
+    wrapEl,
     hoverPort,
     setHoverPort,
     draggingEdgeRef,
     scheduleRender,
   } = props
+
+  const getScreenFromWrap = (clientX: number, clientY: number): { x: number; y: number } | null => {
+    const canvasEl = canvasRefForPointerCapture.current
+    const wrap = wrapEl
+    if (!canvasEl || !wrap) return null
+
+    const wrapRect = wrap.getBoundingClientRect()
+    const canvasRect = canvasEl.getBoundingClientRect()
+
+    const xCssInWorkspace = clientX - wrapRect.left + wrap.scrollLeft
+    const yCssInWorkspace = clientY - wrapRect.top + wrap.scrollTop
+
+    return {
+      x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
+      y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
+    }
+  }
 
   const ports: Array<{ port: PortSide; x: number; y: number }> = [
     { port: 'n', x: cellSize.w / 2, y: 8 },
@@ -65,7 +85,8 @@ export default function CanvasCellPorts(props: CanvasCellPortsProps) {
 
               canvasEl.setPointerCapture(ev.pointerId)
 
-              const screen = getCanvasScreenPoint(canvasEl, ev.clientX, ev.clientY)
+              const screen = getScreenFromWrap(ev.clientX, ev.clientY)
+              if (!screen) return
               const world = screenToWorld(screen, camera)
 
               draggingEdgeRef.current = {
