@@ -400,7 +400,7 @@ Matheshop 的 Canvas 交互（pointer/keyboard 驱动的“连续手势”）正
 
 ### 2.4.5.1 纳入 FSM 的范围（建议/已执行）
 
-适合纳入 FSM 的标准：
+适合纳入 FSM的标准：
 
 - 由 **pointer 手势** 或 **键盘 + pointer 组合** 驱动
 - 具有明确的“开始/进行/结束/取消”生命周期
@@ -727,6 +727,24 @@ pnpm build
 
 - 入口：`src/components/canvas/cells/CanvasCellResizeHandle.tsx`
 - move：`src/components/CanvasBoard.tsx` 的 `handlePointerMove`（`resizingCellRef` 分支）。
+
+### 4.0.4.1 Resize 手柄与指针偏移（避免起步跳变）
+
+由于 resize handle 的 DOM 是一个有面积的方块（12x12），用户 pointerdown 可能落在该方块的任意位置（不一定是几何中心）。
+如果 resize 逻辑直接把“当前指针位置 world”当作“右下角 corner”，会导致：
+
+- 刚开始拖拽的一瞬间，节点尺寸会突然跳到一个很大的值（corner 被错误推远）
+- handle 会看起来脱离光标（光标不在右下角上）
+
+修复策略（推荐/已实现）：
+
+- 在 `CELL_RESIZE_START` 时计算并记录：
+  - `startCornerWorld = startCenterWorld + startSize/2`
+  - `startPointerOffsetFromCornerWorld = startWorld - startCornerWorld`
+- 在 `CELL_RESIZE_MOVE` 时修正：
+  - `cornerWorld = pointerWorld - startPointerOffsetFromCornerWorld`
+
+这样无论用户点在 handle 的哪个像素上，拖拽期间 handle 都会保持贴近光标，resize 不会起步跳变。
 
 ## 画布交互：节点创建与编辑提交（重要行为约定）
 

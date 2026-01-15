@@ -78,6 +78,10 @@ export type CanvasInteractionState =
       aspect: number
       /** 固定中心锚点（world），用于中心对称缩放 */
       startCenterWorld: WorldPoint
+      /** 拖拽开始时：指针相对“右下角(handle) world 坐标”的偏移，用于消除起步跳变 */
+      startPointerOffsetFromCornerWorld: WorldPoint
+      /** 拖拽开始时：cell 右下角（corner）在 world 中的坐标 */
+      startCornerWorld: WorldPoint
     }
   | {
       tag: 'draggingEdge'
@@ -154,6 +158,10 @@ export type CanvasInteractionEvent =
       aspect: number
       /** 固定中心锚点（world）。由 UI 层在 resize 开始时计算并传入 */
       startCenterWorld: WorldPoint
+      /** 指针相对右下角(handle)的 world 偏移 */
+      startPointerOffsetFromCornerWorld: WorldPoint
+      /** 拖拽开始时：cell 右下角（corner）在 world 中的坐标 */
+      startCornerWorld: WorldPoint
     }
   | {
       kind: 'CELL_RESIZE_MOVE'
@@ -197,4 +205,3 @@ export type CanvasFsmCommand =
       localPos: LocalPoint
     }
   | { kind: 'PUSH_HISTORY'; label: string }
-

@@ -276,6 +276,9 @@ export function canvasFsmStep(
 
     case 'CELL_RESIZE_START': {
       commands.push({ kind: 'CAPTURE_POINTER', pointerId: ev.pointerId })
+
+      const startCornerWorld = ev.startCornerWorld
+
       return {
         state: {
           tag: 'resizingCell',
@@ -285,6 +288,8 @@ export function canvasFsmStep(
           startSize: ev.startSize,
           aspect: ev.aspect,
           startCenterWorld: ev.startCenterWorld,
+          startPointerOffsetFromCornerWorld: ev.startPointerOffsetFromCornerWorld,
+          startCornerWorld,
         },
         ctx,
         commands,
@@ -295,21 +300,22 @@ export function canvasFsmStep(
       if (state.tag !== 'resizingCell' || state.pointerId !== ev.pointerId) return { state, ctx, commands }
 
       const center = state.startCenterWorld
-      const dxFromCenter = ev.world.x - center.x
-      const dyFromCenter = ev.world.y - center.y
+      const offset = state.startPointerOffsetFromCornerWorld
+      const cornerWorld = { x: ev.world.x - offset.x, y: ev.world.y - offset.y }
 
-      // 以开始尺寸为基准做增量（避免越过中心点时 abs() 造成尺寸瞬间塌缩到 min）
-      let nextW = state.startSize.w + dxFromCenter * 2
-      let nextH = state.startSize.h + dyFromCenter * 2
+      // 关键：使用“相对开始右下角”的增量，而不是把绝对 cornerWorld 当成增量
+      const dCornerX = cornerWorld.x - state.startCornerWorld.x
+      const dCornerY = cornerWorld.y - state.startCornerWorld.y
 
-      // clamp（保持正尺寸）
+      let nextW = state.startSize.w + dCornerX
+      let nextH = state.startSize.h + dCornerY
+
       nextW = Math.max(40, nextW)
       nextH = Math.max(28, nextH)
 
       if (ev.shiftKey) {
         const aspect = state.aspect > 0 ? state.aspect : 1
-        // 保持“以增量更大的方向为主”更符合手感
-        if (Math.abs(dyFromCenter) >= Math.abs(dxFromCenter)) {
+        if (Math.abs(dCornerY) >= Math.abs(dCornerX)) {
           nextW = nextH * aspect
         } else {
           nextH = nextW / aspect

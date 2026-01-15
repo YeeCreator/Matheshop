@@ -183,3 +183,6 @@
 
 - 修复：双击新建节点后若未输入内容就点击空白处，节点会被当作“空内容提交”而删除，导致“刚创建就消失”。现在空内容提交只退出编辑态并保留节点。
 - 修复/改进：节点 resize 采用 world 中心锚定，FSM resize command 直接设置 `localPos`（避免 delta 叠加漂移），并在 cell 更新后重算 `worldPos`（`recomputeWorldAll`）保持渲染与命中一致。
+- 修复：节点 resize 在跨过中心点/接近中心点时可能出现轻微跳变（abs(dx)*2 + min clamp 导致尺寸突变）。现改为以 startSize 为基准做增量（startSize + dx*2 / dy*2），再 clamp，保持尺寸变化连续。
+- 修复：resize 开始时若 pointerdown 没落在 handle 的几何中心，会把指针 world 误当成右下角 corner world，导致节点在第一帧跳跃式放大并脱离光标。现新增 `startPointerOffsetFromCornerWorld`，在 move 时用 `cornerWorld = pointerWorld - offset` 修正，确保 handle 始终贴住光标。
+- 修复：resize 起步仍有跳变时，根因是把“绝对 cornerWorld（相对 center）”误当作“从 startSize 的增量”来计算，第一帧会把 corner 的绝对坐标叠加到 startSize 上导致大幅跳变。现新增 `startCornerWorld`，改为基于 `dCorner = cornerWorld - startCornerWorld` 计算 `nextSize = startSize + dCorner`，消除跳变。

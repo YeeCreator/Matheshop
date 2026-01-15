@@ -10,7 +10,6 @@ import { ensureEdgeUnique, getPortWorld as getPortWorldDomain, pickNearestPort a
 import {
   collectCellWorldHits,
   recomputeWorldAll,
-  removeCellById,
   updateCellById,
 } from './canvas/domain/cellTree'
 import {
@@ -1264,7 +1263,16 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             dragStartTimerRef={dragStartTimerRef}
             draggingCellPointerDown={handleCellPointerDownForDrag}
             onResizeStart={(args: Parameters<NonNullable<React.ComponentProps<typeof CanvasCellLayer>['onResizeStart']>>[0]) => {
-              // 进入 resize 状态由 FSM 接管：startCenterWorld 必须是真实 cell center(world)
+              // 拖拽开始时：修正 offset，保证手柄位置跟随光标（避免点击在 handle 边缘导致起步跳变）
+              const startCornerWorld = {
+                x: args.startCenterWorld.x + args.startSize.w / 2,
+                y: args.startCenterWorld.y + args.startSize.h / 2,
+              }
+              const startPointerOffsetFromCornerWorld = {
+                x: args.startWorld.x - startCornerWorld.x,
+                y: args.startWorld.y - startCornerWorld.y,
+              }
+
               dispatchFsm({
                 kind: 'CELL_RESIZE_START',
                 pointerId: args.pointerId,
@@ -1273,6 +1281,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                 startSize: args.startSize,
                 aspect: args.aspect,
                 startCenterWorld: args.startCenterWorld,
+                startCornerWorld,
+                startPointerOffsetFromCornerWorld,
               })
             }}
           />
