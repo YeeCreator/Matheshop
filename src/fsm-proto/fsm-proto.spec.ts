@@ -1,10 +1,3 @@
-/**
- * fsm-proto.spec.ts
- *
- * 单元测试集合（vitest）：
- * - 验证 machine/interpret/assign/hub 等核心模块的语义与边界行为；
- * - 包含：initial 展开、祖先转移的 exit/enter 顺序、internal transition 行为以及 hub 的分发策略测试。
- */
 import { describe, expect, test } from 'vitest';
 import { createMachine } from './core/machine';
 import { interpret, assign } from './runtime/interpreter';
