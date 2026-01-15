@@ -33,8 +33,7 @@ import {
   screenToWorld,
 } from './canvas/utils/geometry'
 import { parseBlocksFromText } from './canvas/utils/blocks'
-import { useCanvasFsm } from './canvas/fsm/useCanvasFsm'
-import type { CanvasFsmCommand } from './canvas/fsm/types'
+
 import type { InlineSelection } from './canvas/exprSelection'
 
 export type Tool = 'text'
@@ -120,16 +119,43 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const [cells, setCells] = useState<CellNode[]>([])
   const [selectedCellId, setSelectedCellId] = useState<string | null>(null)
   const [editingCellId, setEditingCellId] = useState<string | null>(null)
-  const [dropHintCellId, setDropHintCellId] = useState<string | null>(null)
+  // dropHint 仍会传给 CanvasCellLayer 使用，但不再需要 setter
+  const [dropHintCellId] = useState<string | null>(null)
 
   const nextCellSeqRef = useRef<number>(1)
 
   const dragStartTimerRef = useRef<number | null>(null)
 
   // --- 交互 FSM（渐进迁移：接入框选/连线/视口/节点拖拽/缩放）---
-  // （移除顶部版本：必须放到 ensureEdge/scheduleRender/dispatchFsm 都已声明之后）
-  // const applyFsmCommands = useCallback(...)
-  // const handleCellPointerDownForDrag = useCallback(...)
+  // 移除仍残留的 applyFsmCommands + useCanvasFsm 全块（已回滚到本地 refs/state）
+
+  // 新增：用于回滚后的本地交互状态（替代 fsm.state）
+  const viewportPanRef = useRef<null | {
+  pointerId: number
+  startScreen: { x: number; y: number }
+  startCam: { x: number; y: number; zoom: number }
+  }>(null)
+
+  const cellDragRef = useRef<null | {
+  pointerId: number
+  cellId: string
+  startWorld: { x: number; y: number }
+  startScreen: { x: number; y: number }
+  startPos: { x: number; y: number }
+  heldReady: boolean
+  movedReady: boolean
+  isDragging: boolean
+  }>(null)
+
+  const resizeRef = useRef<null | {
+  pointerId: number
+  cellId: string
+  startSize: { w: number; h: number }
+  aspect: number
+  startCenterWorld: { x: number; y: number }
+  startCornerWorld: { x: number; y: number }
+  startPointerOffsetFromCornerWorld: { x: number; y: number }
+  }>(null)
 
   const rafRef = useRef<number | null>(null)
   const scheduleRender = useCallback(() => {
@@ -562,7 +588,6 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   // 多选相关 state
   const [selectionBox, setSelectionBox] = useState<null | { start: { x: number; y: number }; end: { x: number; y: number } }>(null)
   const [multiSelectedIds, setMultiSelectedIds] = useState<string[]>([])
-  const selectionStartRef = useRef<null | { x: number; y: number }> (null)
   const isBoxSelectingRef = useRef(false)
 
   // 基于可滚动容器（canvas-wrap）计算“画布像素坐标”。
@@ -627,113 +652,19 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   )
 
   // --- 交互 FSM（渐进迁移：接入框选/连线/视口/节点拖拽/缩放）---
-  const applyFsmCommands = useCallback(
-    (cmds: CanvasFsmCommand[]) => {
-      for (const cmd of cmds) {
-        if (cmd.kind === 'SET_SELECTION_BOX') {
-          setSelectionBox(cmd.box)
-          if (cmd.box) {
-            selectionStartRef.current = cmd.box.start
-            isBoxSelectingRef.current = true
-          } else {
-            selectionStartRef.current = null
-            isBoxSelectingRef.current = false
-          }
-          continue
-        }
+  // const { model: fsm, dispatch: dispatchFsm } = useCanvasFsm({
+  //   camera: cameraRef.current,
+  //   getFreshCamera: () => ({ ...cameraRef.current }),
+  //   onCommands: applyFsmCommands,
+  //   externalSelectedCellId: selectedCellId,
+  //   externalSelectedEdgeId: selectedEdgeId,
+  //   externalSelectedFormulaId: selectedFormulaId,
+  //   externalMultiSelectedIds: multiSelectedIds,
+  //   externalIsLinkMode: isLinkMode,
+  //   externalLinkFromId: linkFromId,
+  // })
 
-        if (cmd.kind === 'SET_HOVER_PORT') {
-          setHoverPort(cmd.hover)
-          continue
-        }
-
-        if (cmd.kind === 'ENSURE_EDGE') {
-          ensureEdge(cmd.fromId, cmd.toId, cmd.fromPort, cmd.toPort)
-          continue
-        }
-
-        if (cmd.kind === 'SET_CAMERA') {
-          cameraRef.current = cmd.camera
-          scheduleRender()
-          continue
-        }
-
-        if (cmd.kind === 'CAPTURE_POINTER') {
-          const canvas = canvasRef.current
-          if (canvas) {
-            try {
-              canvas.setPointerCapture(cmd.pointerId)
-            } catch {
-              // ignore
-            }
-          }
-          continue
-        }
-
-        if (cmd.kind === 'RELEASE_POINTER') {
-          const canvas = canvasRef.current
-          if (canvas) {
-            try {
-              canvas.releasePointerCapture(cmd.pointerId)
-            } catch {
-              // ignore
-            }
-          }
-          continue
-        }
-
-        if (cmd.kind === 'CLEAR_DROP_HINT') {
-          setDropHintCellId(null)
-          continue
-        }
-
-        if (cmd.kind === 'UPDATE_CELL_POS') {
-          setCells((prev) =>
-            recomputeWorldAll(
-              updateCellById(prev, cmd.cellId, (c) => ({
-                ...c,
-                localPos: { x: cmd.localPos.x, y: cmd.localPos.y },
-              })),
-            ),
-          )
-          scheduleRender()
-          continue
-        }
-
-        if (cmd.kind === 'UPDATE_CELL_SIZE_CENTER_ANCHORED') {
-          setCells((prev) =>
-            recomputeWorldAll(
-              updateCellById(prev, cmd.cellId, (c) => ({
-                ...c,
-                size: { w: cmd.size.w, h: cmd.size.h },
-                localPos: { x: cmd.localPos.x, y: cmd.localPos.y },
-              })),
-            ),
-          )
-          scheduleRender()
-          continue
-        }
-
-        if (cmd.kind === 'PUSH_HISTORY') {
-          onHistoryPush({ id: crypto.randomUUID(), label: cmd.label, at: Date.now() }, 'user')
-        }
-      }
-    },
-    [ensureEdge, onHistoryPush, scheduleRender],
-  )
-
-  const { model: fsm, dispatch: dispatchFsm } = useCanvasFsm({
-    camera: cameraRef.current,
-    getFreshCamera: () => ({ ...cameraRef.current }),
-    onCommands: applyFsmCommands,
-    externalSelectedCellId: selectedCellId,
-    externalSelectedEdgeId: selectedEdgeId,
-    externalSelectedFormulaId: selectedFormulaId,
-    externalMultiSelectedIds: multiSelectedIds,
-    externalIsLinkMode: isLinkMode,
-    externalLinkFromId: linkFromId,
-  })
-
+  // handleCellPointerDownForDrag：改为写入本地 cellDragRef，并使用 timer 完成 holdReady
   const handleCellPointerDownForDrag = useCallback(
     (args: {
       ev: React.PointerEvent
@@ -744,39 +675,41 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }) => {
       const { ev, cell: c, screen, world } = args
 
-      // 清理可能存在的上一次定时器
       if (dragStartTimerRef.current != null) {
         window.clearTimeout(dragStartTimerRef.current)
         dragStartTimerRef.current = null
       }
 
-      dispatchFsm({
-        kind: 'CELL_DRAG_ARM',
+      cellDragRef.current = {
         pointerId: ev.pointerId,
         cellId: c.id,
         startWorld: world,
         startScreen: screen,
         startPos: { x: c.localPos.x, y: c.localPos.y },
-      })
+        heldReady: false,
+        movedReady: false,
+        isDragging: false,
+      }
 
       dragStartTimerRef.current = window.setTimeout(() => {
         dragStartTimerRef.current = null
-        dispatchFsm({ kind: 'CELL_DRAG_HOLD_READY', pointerId: ev.pointerId })
+        if (cellDragRef.current && cellDragRef.current.pointerId === ev.pointerId) {
+          cellDragRef.current.heldReady = true
+        }
       }, 150)
     },
-    [dispatchFsm],
-  )
+    [],
+    )
 
+  // handlePointerDown：移除 dispatchFsm，改为本地处理
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // 编辑中：点击画布空白处视为“完成编辑”
     if (editingCellId && e.button === 0) {
       commitCellEditing(editingCellId)
     }
 
-    // 如果正在拖拽公式，不要让画布再吃到新的 pointerdown
     if (draggingFormulaRef.current) {
       e.preventDefault()
       return
@@ -784,29 +717,32 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     e.preventDefault()
 
-    // 连线模式：点击画布空白处取消起点（不创建新节点）
+    // 连线模式：点击空白处取消起点
     if (isLinkMode && e.button === 0) {
       setSelectedFormulaId(null)
       setSelectedCellId(null)
       setLinkFromId(null)
-      // 同步到 FSM（后续会完全迁移）
-      dispatchFsm({ kind: 'SET_LINK_FROM', linkFromId: null })
       return
     }
 
     const isMiddle = e.button === 1
     const isMiddleByButtons = (e.buttons & 4) === 4
 
-    // 中键 或 空格+左键：拖拽平移
+    // 中键 或 空格+左键：视口平移
     if (isMiddle || isMiddleByButtons || (isSpaceDown && e.button === 0)) {
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
-      dispatchFsm({
-        kind: 'VIEWPORT_PAN_START',
+      viewportPanRef.current = {
         pointerId: e.pointerId,
         startScreen: screen,
         startCam: { ...cameraRef.current },
-      })
+      }
+
+      try {
+        canvas.setPointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
       return
     }
 
@@ -822,34 +758,28 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current) {
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
-      dispatchFsm({
-        kind: 'CANVAS_POINTER_DOWN',
-        pointer: {
-          pointerId: e.pointerId,
-          button: e.button,
-          buttons: e.buttons,
-          shiftKey: e.shiftKey,
-          altKey: e.altKey,
-          ctrlKey: e.ctrlKey,
-          metaKey: e.metaKey,
-        },
-        screen,
-        world,
-      })
+      isBoxSelectingRef.current = true
+      setSelectionBox({ start: screen, end: screen })
+
+      try {
+        canvas.setPointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
       return
     }
-  }
+    }
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
     // 双击创建节点：避免在连线/平移/拖拽/框选等状态下误触
+    // handleDoubleClick：不再依赖 fsm.state.tag
     if (isLinkMode) return
-    if (isSpaceDown || fsm.state.tag === 'panningViewport') return
+    if (isSpaceDown || viewportPanRef.current) return
     if (draggingFormulaRef.current) return
-    if (fsm.state.tag === 'draggingCell' || fsm.state.tag === 'resizingCell') return
+    if (cellDragRef.current || resizeRef.current) return
     if (isBoxSelectingRef.current) return
 
     // 只响应左键双击
@@ -904,48 +834,68 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // 节点缩放（已迁移到 FSM）：中心缩放（center-anchored）
-    if (fsm.state.tag === 'resizingCell' && fsm.state.pointerId === e.pointerId) {
+    // 节点缩放：本地 resizeRef
+    if (resizeRef.current && resizeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
-      dispatchFsm({ kind: 'CELL_RESIZE_MOVE', pointerId: e.pointerId, world, shiftKey: e.shiftKey })
+
+      const r = resizeRef.current
+
+      // 修正 pointer 起步 offset，避免跳变
+      const pointerAtCorner = {
+        x: world.x - r.startPointerOffsetFromCornerWorld.x,
+        y: world.y - r.startPointerOffsetFromCornerWorld.y,
+      }
+
+      // 以中心为锚点：corner 偏移决定 half-size
+      const halfW = Math.max(12, Math.abs(pointerAtCorner.x - r.startCenterWorld.x))
+      let nextW = halfW * 2
+      let nextH = Math.max(12, Math.abs(pointerAtCorner.y - r.startCenterWorld.y)) * 2
+
+      if (e.shiftKey) {
+        // Shift：锁定宽高比（以宽为基准）
+        nextH = Math.max(12, halfW / r.aspect) * 2
+      }
+
+      const nextSize = { w: nextW, h: nextH }
+      const nextLocalPos = { x: r.startCenterWorld.x - nextW / 2, y: r.startCenterWorld.y - nextH / 2 }
+
+      setCells((prev) =>
+        recomputeWorldAll(
+          updateCellById(prev, r.cellId, (c) => ({
+            ...c,
+            size: nextSize,
+            localPos: { x: nextLocalPos.x, y: nextLocalPos.y },
+          })),
+        ),
+      )
+
+      scheduleRender()
       return
     }
 
-    // 框选中（迁移到 FSM 后，这里只负责把坐标发给 FSM）
-    if (fsm.state.tag === 'boxSelecting') {
+    // 框选中：更新 selectionBox
+    if (isBoxSelectingRef.current && selectionBox) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
-      dispatchFsm({
-        kind: 'CANVAS_POINTER_MOVE',
-        pointer: { pointerId: e.pointerId, buttons: e.buttons },
-        screen,
-        world,
-      })
+      setSelectionBox({ start: selectionBox.start, end: screen })
+      scheduleRender()
       return
     }
 
-    // 拖拽连线（迁移中：pointerWorld 写入 FSM，hover/吸附仍由这里计算）
+    // 拖拽连线：保持原本 draggingEdgeRef 流程，但不再同步到 FSM
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
       draggingEdgeRef.current.pointerWorld = world
-      dispatchFsm({
-        kind: 'CANVAS_POINTER_MOVE',
-        pointer: { pointerId: e.pointerId, buttons: e.buttons },
-        screen,
-        world,
-      })
 
       const hover = pickNearestPort(world)
       if (hover) {
-        // 不能吸附到起点同一个节点同一个端口
         if (!(hover.cellId === draggingEdgeRef.current.fromId && hover.port === draggingEdgeRef.current.fromPort)) {
           draggingEdgeRef.current.toId = hover.cellId
           draggingEdgeRef.current.toPort = hover.port
@@ -961,25 +911,51 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         setHoverPort(null)
       }
 
-      // 同步 hover 到 FSM（后续让 FSM 接管 hover 计算）
-      dispatchFsm({ kind: 'HOVER_PORT_SET', hover: hover ?? null })
-
       scheduleRender()
       return
     }
 
-    // 拖拽单元框（已迁移到 FSM）
-    if (fsm.state.tag === 'draggingCell' && fsm.state.pointerId === e.pointerId) {
+    // 拖拽单元框：本地 cellDragRef
+    if (cellDragRef.current && cellDragRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
       const world = screenToWorld(screen, cameraRef.current)
 
-      dispatchFsm({ kind: 'CELL_DRAG_MOVE', pointerId: e.pointerId, screen, world })
+      const d = cellDragRef.current
+      const dx = screen.x - d.startScreen.x
+      const dy = screen.y - d.startScreen.y
+      const dist = Math.hypot(dx, dy)
+
+      if (!d.isDragging) {
+        d.movedReady = d.movedReady || dist >= 4
+        const shouldStart = d.movedReady && d.heldReady
+        if (!shouldStart) return
+
+        d.isDragging = true
+        try {
+          canvas.setPointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
+      }
+
+      const ddx = world.x - d.startWorld.x
+      const ddy = world.y - d.startWorld.y
+
+      setCells((prev) =>
+        recomputeWorldAll(
+          updateCellById(prev, d.cellId, (c) => ({
+            ...c,
+            localPos: { x: d.startPos.x + ddx, y: d.startPos.y + ddy },
+          })),
+        ),
+      )
+      scheduleRender()
       return
     }
 
-    // 拖拽公式：优先级最高
+    // 拖拽公式：保持原逻辑
     if (draggingFormulaRef.current && draggingFormulaRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
@@ -996,34 +972,42 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 视口平移（已迁移到 FSM）
-    if (fsm.state.tag === 'panningViewport' && fsm.state.pointerId === e.pointerId) {
+    // 视口平移：本地 viewportPanRef
+    if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
       if (!screen) return
-      dispatchFsm({ kind: 'VIEWPORT_PAN_MOVE', pointerId: e.pointerId, screen })
+
+      const p = viewportPanRef.current
+      const dxScreen = screen.x - p.startScreen.x
+      const dyScreen = screen.y - p.startScreen.y
+
+      cameraRef.current = {
+        x: p.startCam.x - dxScreen / p.startCam.zoom,
+        y: p.startCam.y - dyScreen / p.startCam.zoom,
+        zoom: p.startCam.zoom,
+      }
+
+      scheduleRender()
       return
     }
-  }
+    }
 
   const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     e.preventDefault()
 
-    // 框选结束（迁移到 FSM：由 FSM 清空 selectionBox，并在这里计算命中结果）
-    if (fsm.state.tag === 'boxSelecting' && selectionBox) {
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
-      if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
-      dispatchFsm({
-        kind: 'CANVAS_POINTER_UP_OR_CANCEL',
-        pointer: { pointerId: e.pointerId },
-        screen,
-        world,
-      })
+    // 框选结束
+    if (isBoxSelectingRef.current && selectionBox) {
+      isBoxSelectingRef.current = false
 
-      // selectionBox 是 screen 坐标，命中测试前转换为 world 矩形
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
+
       const box = screenBoxToWorldBox(selectionBox.start, selectionBox.end)
 
       const selected: string[] = []
@@ -1036,18 +1020,24 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       walk(cells, { x: 0, y: 0 })
       setMultiSelectedIds(selected)
 
+      setSelectionBox(null)
       scheduleRender()
       return
     }
 
-    // 结束缩放节点（已迁移到 FSM）
-    if (fsm.state.tag === 'resizingCell' && fsm.state.pointerId === e.pointerId) {
-      dispatchFsm({ kind: 'CELL_RESIZE_END', pointerId: e.pointerId })
+    // 结束缩放节点
+    if (resizeRef.current && resizeRef.current.pointerId === e.pointerId) {
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
+      resizeRef.current = null
       scheduleRender()
       return
     }
 
-    // 结束拖拽连线（迁移到 FSM：创建连接与写历史从 commands 产出）
+    // 结束拖拽连线：直接创建连接与写历史
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       try {
         canvas.releasePointerCapture(e.pointerId)
@@ -1056,23 +1046,10 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       }
 
       const d = draggingEdgeRef.current
-
       if (d.toId && d.toPort) {
-        dispatchFsm({ kind: 'HOVER_PORT_SET', hover: { cellId: d.toId, port: d.toPort } })
-      } else {
-        dispatchFsm({ kind: 'HOVER_PORT_SET', hover: null })
+        ensureEdge(d.fromId, d.toId, d.fromPort, d.toPort)
+        onHistoryPush({ id: crypto.randomUUID(), label: '创建连接', at: Date.now() }, 'user')
       }
-
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
-      if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
-
-      dispatchFsm({
-        kind: 'CANVAS_POINTER_UP_OR_CANCEL',
-        pointer: { pointerId: e.pointerId },
-        screen,
-        world,
-      })
 
       draggingEdgeRef.current = null
       setHoverPort(null)
@@ -1080,19 +1057,25 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 结束拖拽单元框（已迁移到 FSM）
-    if (fsm.state.tag === 'draggingCell' && fsm.state.pointerId === e.pointerId) {
+    // 结束拖拽单元框
+    if (cellDragRef.current && cellDragRef.current.pointerId === e.pointerId) {
       if (dragStartTimerRef.current != null) {
         window.clearTimeout(dragStartTimerRef.current)
         dragStartTimerRef.current = null
       }
 
-      dispatchFsm({ kind: 'CELL_DRAG_END', pointerId: e.pointerId })
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
+
+      cellDragRef.current = null
       scheduleRender()
       return
     }
 
-    // 结束拖拽公式
+    // 结束拖拽公式：保持原逻辑
     if (draggingFormulaRef.current && draggingFormulaRef.current.pointerId === e.pointerId) {
       try {
         canvas.releasePointerCapture(e.pointerId)
@@ -1104,39 +1087,61 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 结束视口平移（已迁移到 FSM）
-    if (fsm.state.tag === 'panningViewport' && fsm.state.pointerId === e.pointerId) {
-      dispatchFsm({ kind: 'VIEWPORT_PAN_END', pointerId: e.pointerId })
+    // 结束视口平移
+    if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) {
+      try {
+        canvas.releasePointerCapture(e.pointerId)
+      } catch {
+        // ignore
+      }
+      viewportPanRef.current = null
       scheduleRender()
       return
     }
-  }
+    }
 
+  // wheel：不再 dispatchFsm，直接本地更新 camera
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
 
-    // 用原生监听器（passive: false）确保能阻止浏览器默认的 Ctrl/⌘+Wheel 页面缩放
     const onWheel = (ev: WheelEvent) => {
       ev.preventDefault()
 
       const screen = getScreenFromWrap(ev.clientX, ev.clientY)
       if (!screen) return
 
-      dispatchFsm({
-        kind: 'VIEWPORT_WHEEL',
-        screen,
-        deltaX: ev.deltaX,
-        deltaY: ev.deltaY,
-        shiftKey: ev.shiftKey,
-        ctrlKey: ev.ctrlKey,
-        metaKey: ev.metaKey,
-      })
+      const cam = cameraRef.current
+      const isZoomGesture = ev.ctrlKey || ev.metaKey
+
+      if (ev.shiftKey && !isZoomGesture) {
+        cameraRef.current = { ...cam, x: cam.x + ev.deltaY / cam.zoom }
+        scheduleRender()
+        return
+      }
+
+      if (!isZoomGesture) {
+        cameraRef.current = { ...cam, x: cam.x + ev.deltaX / cam.zoom, y: cam.y + ev.deltaY / cam.zoom }
+        scheduleRender()
+        return
+      }
+
+      const zoomIntensity = 0.0028
+      const factor = Math.exp(-ev.deltaY * zoomIntensity)
+      const nextZoom = Math.min(64, Math.max(0.08, cam.zoom * factor))
+
+      cameraRef.current = {
+        zoom: nextZoom,
+        x: (cam.x + screen.x / cam.zoom) - screen.x / nextZoom,
+        y: (cam.y + screen.y / cam.zoom) - screen.y / nextZoom,
+      }
+
+      scheduleRender()
     }
 
     wrap.addEventListener('wheel', onWheel, { passive: false })
     return () => wrap.removeEventListener('wheel', onWheel)
-  }, [dispatchFsm, getScreenFromWrap])
+    }, [getScreenFromWrap, scheduleRender])
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     // 由原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
@@ -1276,8 +1281,11 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             canvasRefForPointerCapture={canvasRef}
             dragStartTimerRef={dragStartTimerRef}
             draggingCellPointerDown={handleCellPointerDownForDrag}
+            // CanvasCellLayer.onResizeStart：不再 dispatchFsm，改为写入本地 resizeRef 并 capture pointer
             onResizeStart={(args: Parameters<NonNullable<React.ComponentProps<typeof CanvasCellLayer>['onResizeStart']>>[0]) => {
-              // 拖拽开始时：修正 offset，保证手柄位置跟随光标（避免点击在 handle 边缘导致起步跳变）
+              const canvas = canvasRef.current
+              if (!canvas) return
+
               const startCornerWorld = {
                 x: args.startCenterWorld.x + args.startSize.w / 2,
                 y: args.startCenterWorld.y + args.startSize.h / 2,
@@ -1287,17 +1295,21 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                 y: args.startWorld.y - startCornerWorld.y,
               }
 
-              dispatchFsm({
-                kind: 'CELL_RESIZE_START',
+              resizeRef.current = {
                 pointerId: args.pointerId,
                 cellId: args.cellId,
-                startWorld: args.startWorld,
                 startSize: args.startSize,
                 aspect: args.aspect,
                 startCenterWorld: args.startCenterWorld,
                 startCornerWorld,
                 startPointerOffsetFromCornerWorld,
-              })
+              }
+
+              try {
+                canvas.setPointerCapture(args.pointerId)
+              } catch {
+                // ignore
+              }
             }}
           />
 

@@ -186,3 +186,29 @@
 - 修复：节点 resize 在跨过中心点/接近中心点时可能出现轻微跳变（abs(dx)*2 + min clamp 导致尺寸突变）。现改为以 startSize 为基准做增量（startSize + dx*2 / dy*2），再 clamp，保持尺寸变化连续。
 - 修复：resize 开始时若 pointerdown 没落在 handle 的几何中心，会把指针 world 误当成右下角 corner world，导致节点在第一帧跳跃式放大并脱离光标。现新增 `startPointerOffsetFromCornerWorld`，在 move 时用 `cornerWorld = pointerWorld - offset` 修正，确保 handle 始终贴住光标。
 - 修复：resize 起步仍有跳变时，根因是把“绝对 cornerWorld（相对 center）”误当作“从 startSize 的增量”来计算，第一帧会把 corner 的绝对坐标叠加到 startSize 上导致大幅跳变。现新增 `startCornerWorld`，改为基于 `dCorner = cornerWorld - startCornerWorld` 计算 `nextSize = startSize + dCorner`，消除跳变。
+
+## 2026-01-16
+
+### 回滚：彻底放弃 FSM 架构，改回 CanvasBoard 本地交互状态维护
+
+- 回滚并移除 Canvas 交互 FSM：
+  - 删除：`src/components/canvas/fsm/*`
+  - 在 `src/components/CanvasBoard.tsx` 内改为直接用本地 `useRef/useState` 管理交互：
+    - 框选：`isBoxSelectingRef` + `selectionBox`
+    - 视口平移：`viewportPanRef`
+    - cell 拖拽：`cellDragRef`（含 hold=150ms、threshold=4px）
+    - cell resize：`resizeRef`（center-anchored，支持 Shift 锁定宽高比）
+    - 连线拖拽：沿用 `draggingEdgeRef`，在 pointerup 时直接落地 `ensureEdge + onHistoryPush('创建连接')`
+- 删除未接入业务的实验包：`src/fsm-proto/*`
+- 文档：更新 `docs/DEVELOPER_GUIDE.md`，新增“2.4.x 交互架构说明：已回滚并移除 Canvas FSM（2026-01-16）”。
+
+#### 验收/校验
+
+- 自动化：`pnpm test` 通过。
+- 手工建议回归（重点交互）：
+  - wheel 平移 / Ctrl/⌘ + wheel 缩放
+  - 中键/空格+拖拽 平移
+  - 空白处框选（松手后 selectionBox 消失且 multiSelectedIds 更新）
+  - cell 拖拽（按住-移动阈值后开始拖拽，松手释放 pointer capture）
+  - cell resize（拖拽右下角手柄，Shift 锁比）
+  - 连线拖拽（松手创建连接并写入历史）

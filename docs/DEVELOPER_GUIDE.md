@@ -390,51 +390,29 @@ pnpm desktop:dist
 - Electron 会自己启动 Vite（脚本里用 concurrently）
 - 这种方式最省心，但你就不需要再单独点 `pnpm dev`
 
-## 2.4.5 Canvas 交互 FSM（状态机）
+## 2.4.x 交互架构说明：已回滚并移除 Canvas FSM（2026-01-16）
 
-Matheshop 的 Canvas 交互（pointer/keyboard 驱动的“连续手势”）正在逐步迁移到 FSM（Finite State Machine）中，以便：
+> 结论：仓库已彻底放弃 FSM 架构（包含实验性 `src/fsm-proto/*` 与 Canvas 交互层 `src/components/canvas/fsm/*`）。
 
-- 明确区分“视口操作 vs 节点操作 vs 连线操作”
-- 避免多处 handler 交叉修改同一份 state 导致的竞态
-- 让复杂手势（框选、hover 吸附、拖拽阈值、指针捕获等）可测试/可演进
+### 发生了什么
 
-### 2.4.5.1 纳入 FSM 的范围（建议/已执行）
+- 历史上一度尝试将画布的“互斥主交互”收敛为一个 reducer/FSM，并通过 commands 协议把副作用交回 `CanvasBoard` 落地。
+- **目前已回滚到“原来的方式”**：所有画布交互（框选、视口平移、cell 拖拽、cell resize、连线拖拽）均由 `src/components/CanvasBoard.tsx` 直接维护本地 `useRef/useState` 来驱动。
 
-适合纳入 FSM的标准：
+### 现在应该怎么改交互
 
-- 由 **pointer 手势** 或 **键盘 + pointer 组合** 驱动
-- 具有明确的“开始/进行/结束/取消”生命周期
-- 需要处理 pointer capture、hover、阈值（hold）、或多实体协同（例如连线吸附）
+- 入口文件：`src/components/CanvasBoard.tsx`
+- 关键状态（refs）：
+  - `viewportPanRef`：视口平移手势
+  - `cellDragRef`：cell 拖拽（含 hold/move threshold）
+  - `resizeRef`：cell resize（center-anchored）
+  - `isBoxSelectingRef` + `selectionBox`：框选
+  - `draggingEdgeRef`：连线拖拽
 
-目前（或建议）纳入 FSM 的内容：
+### 注意事项
 
-- 视口（Viewport）
-  - 平移：中键拖拽/空格+拖拽
-  - 滚轮：缩放（ctrl/⌘+wheel）与滚动
-- 节点（Cell）
-  - 拖拽移动（含 hold-ready 阈值）
-  - 缩放（resize handle）
-  - 框选（box selection）
-- 连线（Edge）
-  - hover port 与吸附逻辑（部分仍在迁移中）
-  - 松开时创建连接（通过 FSM command `ENSURE_EDGE` 落地）
-
-### 2.4.5.2 不需要纳入 FSM 的范围（保持 UI 层处理）
-
-不满足“连续手势”特征、或本质是一次性 UI 行为的操作，一般不纳入 FSM：
-
-- 菜单点击、按钮点击、设置项切换（典型是一次性 onClick/onChange）
-- Modal/Panel 打开关闭
-- 纯展示态的 hover/tooltip（不影响手势状态机）
-
-> 例外：如果某个 UI 行为会影响 Canvas 的手势解释（例如切换工具/模式），可以视为 FSM 的 **外部输入**（external state），通过 `useCanvasFsm` 的 external 字段注入。
-
-### 2.4.5.3 入口文件
-
-- FSM 类型与 Command：`src/components/canvas/fsm/types.ts`
-- FSM reducer：`src/components/canvas/fsm/reducer.ts`
-- React 侧接入：`src/components/canvas/fsm/useCanvasFsm.ts`
-- 画布事件转发/命令落地：`src/components/CanvasBoard.tsx`
+- pointer capture：拖拽/平移/框选/resize 都依赖 `canvas.setPointerCapture(...)`，结束时必须 `releasePointerCapture(...)`，否则会出现拖拽卡住。
+- wheel 缩放/平移：统一在 `canvas-wrap` 的原生 `wheel` 监听器里处理（`passive:false`），用于正确阻止浏览器默认的 Ctrl/⌘+Wheel 页面缩放。
 
 ## 3. 目录结构与职责边界
 
