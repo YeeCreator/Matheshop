@@ -1,3 +1,15 @@
+/**
+ * edges.ts
+ *
+ * 与连线（edge）相关的领域逻辑（纯函数）：
+ * - ensureEdgeUnique：确保边在集合中唯一（考虑无向等价：A->B 与 B->A 视为重复，且端口对称）
+ * - getPortWorld：计算 cell 某侧端口在 world 坐标下的位置（基于 hit.world 与 cell size）
+ * - pickNearestPort：根据 pointerWorld 在一定吸附半径内挑选最近端口（带 pad 命中范围）
+ *
+ * 注意：
+ * - 这些函数依赖 collectCellWorldHits/findCellById 提供的节点 world 命中信息。
+ * - 吸附距离/边距（margin/pad/snapDist）为 UI 体验参数。
+ */
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
 import { collectCellWorldHits, findCellById } from './cellTree'
 
@@ -76,4 +88,3 @@ export function pickNearestPort(args: {
   if (!best || best.dist2 > snapDist * snapDist) return null
   return { cellId: best.cellId, port: best.port }
 }
-

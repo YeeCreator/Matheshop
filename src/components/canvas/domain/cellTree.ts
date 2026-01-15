@@ -1,3 +1,16 @@
+/**
+ * cellTree.ts
+ *
+ * Canvas 中 CellNode 树结构的纯函数工具集：
+ * - 递归查找/更新/删除节点（按 id）
+ * - 计算每个节点在 world 坐标系下的位置与矩形（用于命中测试）
+ * - 拖拽 drop 父节点选择（禁止 drop 到自身或自身子树）
+ * - 重算整棵树的 worldPos（从父节点 world 累加 localPos）
+ *
+ * 约定：
+ * - world 坐标为画布逻辑坐标（与 camera 变换配套），与 DOM/CSS 像素不同。
+ * - group 节点在 collapsed 时，其子树不参与命中收集。
+ */
 import type { CellNode } from '../../cellTypes'
 
 export type CellWorldHit = {
@@ -120,4 +133,3 @@ export function recomputeWorldForSubtree(node: CellNode, parentWorld: { x: numbe
 export function recomputeWorldAll(list: CellNode[]) {
   return list.map((c) => recomputeWorldForSubtree(c, { x: 0, y: 0 }))
 }
-

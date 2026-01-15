@@ -1,3 +1,17 @@
+/**
+ * CanvasCellBody
+ *
+ * cell 内容区域（body）渲染与编辑交互：
+ * - 三种展示分支：
+ *   1) isEditing：textarea 编辑器（Enter 提交，Ctrl/⌘+Enter 提交并求值，Esc/blur 提交退出）
+ *   2) 纯算术表达式：token 视图 + 行内编辑器（用于替换 tokenRange）
+ *   3) 普通内容：块渲染（HTML）
+ * - 编辑态输入时会调用 estimateCellSizeFromText 动态估算 size，并做“中心锚定”的 localPos 修正，
+ *   以减少尺寸变化造成的跳动。
+ *
+ * 事件约定：
+ * - body 内双击（避开 port/resize 区域）进入编辑；连线模式下禁止进入编辑。
+ */
 import React from 'react'
 import type { CellNode } from '../../cellTypes'
 import { updateCellById } from '../domain/cellTree'

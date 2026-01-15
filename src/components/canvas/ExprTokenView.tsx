@@ -1,3 +1,12 @@
+/**
+ * ExprTokenView.tsx
+ *
+ * 表达式 token 的视图组件：
+ * - 以 <span> 列表渲染 Token[]，并根据 selectedTokenId 高亮选中项；
+ * - 单击 token：回传 tokenId/tokenIndex 以及用于定位弹层的 anchorRect；
+ * - 双击 token：请求进入编辑（同样回传 anchorRect）；
+ * - 点击组件空白处：仅取消 token 选中（stopPropagation，避免影响外层 cell/canvas 的选中逻辑）。
+ */
 import type React from 'react'
 import type { Token } from '../../../engine/engine_ts/src/index'
 

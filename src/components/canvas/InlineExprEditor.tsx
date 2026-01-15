@@ -1,3 +1,13 @@
+/**
+ * InlineExprEditor
+ *
+ * 行内表达式编辑弹层（轻量输入框）：
+ * - 通过 anchorCss 进行绝对定位（通常由 token 的 DOMRect 换算得到）；
+ * - Enter：应用；Escape：取消；
+ * - pointerdown stopPropagation：避免被外层画布/单元框的拖拽与选中逻辑拦截。
+ *
+ * 说明：组件不持有业务状态，draft 与 apply/cancel 由上层控制。
+ */
 import { useEffect, useRef } from 'react'
 
 export type InlineExprEditorProps = {

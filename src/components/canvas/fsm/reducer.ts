@@ -1,6 +1,15 @@
-// 画布交互 FSM：纯 reducer/transition（不直接操作 React state）
-// 设计：reducer 只负责计算 nextState/nextContext，并产出 commands 给外层执行。
-
+/**
+ * reducer.ts
+ *
+ * 画布交互 FSM 的纯 reducer/transition：
+ * - 输入：当前 state + ctx + event
+ * - 输出：nextState + nextCtx + commands
+ *
+ * 设计边界：
+ * - reducer 不直接操作 React state / DOM；
+ * - 一切副作用（setState、pointer capture、写历史、更新 camera/cell 数据等）通过 commands 交给外层执行；
+ * - 用于渐进迁移：逐步把 CanvasBoard 中分散的互斥交互逻辑收敛到统一状态机。
+ */
 import type { CanvasFsmCommand, CanvasInteractionContext, CanvasInteractionEvent, CanvasInteractionState } from './types'
 
 export type CanvasFsmStepResult = {

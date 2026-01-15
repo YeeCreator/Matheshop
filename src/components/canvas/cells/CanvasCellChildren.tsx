@@ -1,3 +1,12 @@
+/**
+ * CanvasCellChildren
+ *
+ * 渲染某个 cell 的子节点容器（children 区域）。
+ * - 当 `collapsed` 为真时不渲染（返回 null），用于组节点折叠。
+ * - 当 `childrenNodes` 为空时不渲染，避免产生多余 DOM。
+ * - 实际子节点的渲染由 `renderChild(child, nextDepth, parentWorld)` 委托给上层，
+ *   以便复用 layout/坐标计算与递归渲染策略。
+ */
 import React from 'react'
 import type { CellNode } from '../../cellTypes'
 
@@ -17,4 +26,3 @@ export default function CanvasCellChildren(props: CanvasCellChildrenProps) {
 
   return <div className="cell-children">{childrenNodes.map((ch) => renderChild(ch, depth + 1, parentWorld))}</div>
 }
-

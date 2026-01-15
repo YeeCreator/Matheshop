@@ -1,3 +1,17 @@
+/**
+ * CanvasBoard
+ *
+ * 画布主组件（状态汇聚层）：
+ * - 管理 camera（world<->screen）与可滚动 workspace（wrap）之间的坐标换算；
+ * - 管理三类可视对象与其交互：cells（文本块/组）、edges（连线）、formulas（KaTeX 公式）；
+ * - 统一处理全局输入（wheel 缩放/平移、Esc 取消、L 连线模式、双击新建 cell 等）；
+ * - 渐进迁移：将互斥主交互（框选/拖拽/缩放/视口操作/连线拖拽）交给 Canvas FSM，
+ *   由 reducer 产出 commands，本组件负责执行 commands 并落地到 React state。
+ *
+ * 坐标约定：
+ * - client（浏览器坐标）→ workspace CSS（考虑 wrap.scroll）→ canvas screen(px，考虑 DPR) → world（逻辑坐标）。
+ * - cells/edges/formulas 的布局基于 world 坐标；DOM 绝对定位使用 workspace 内 CSS 像素。
+ */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import katex from 'katex'
 import type { CanvasEdge, CellNode, PortSide } from './cellTypes'

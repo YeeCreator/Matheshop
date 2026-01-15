@@ -1,5 +1,17 @@
-// 画布交互 FSM：基础类型定义（可渐进迁移）
-// 说明：这里的“状态”用于表达互斥的主交互；“上下文”用于保存跨状态共享的数据。
+/**
+ * types.ts
+ *
+ * 画布交互 FSM 的类型/协议定义：
+ * - State：描述互斥的“主交互状态”（idle/框选/平移/拖拽 cell/缩放 cell/拖拽连线等）
+ * - Context：保存跨状态共享的数据（camera、selection、modes、hoverPort、selectionBox、阈值参数等）
+ * - Event：UI 层输入抽象（pointer/wheel/模式切换）
+ * - Command：reducer 产出的“副作用协议”，由外层（CanvasBoard）执行以落地到 React state/DOM。
+ *
+ * 坐标约定：
+ * - ScreenPoint：canvas 像素坐标（受 DPR 影响）
+ * - WorldPoint：画布逻辑坐标（受 camera 影响）
+ * - LocalPoint：节点相对父节点的局部坐标（用于存储 cell.localPos）
+ */
 
 import type { CellId, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'

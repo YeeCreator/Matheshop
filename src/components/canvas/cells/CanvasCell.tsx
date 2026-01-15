@@ -1,3 +1,21 @@
+/**
+ * CanvasCell
+ *
+ * 单个 cell 的 UI 容器组件（渲染 + 交互入口）：
+ * - 负责将 cell 的 world 布局结果（cssRect）渲染为 DOM 绝对定位；
+ * - 组合子组件：Header/Body/Ports/ResizeHandle/Children，以及选中/落点提示占位层；
+ * - 处理 pointer 事件并将“拖拽/缩放”等互斥交互委托给上层（FSM/refs）：
+ *   - 拖拽：通过 draggingCellPointerDown + dragStartTimerRef（按住阈值）进入 FSM；
+ *   - 缩放：优先走 onResizeStart（渐进迁移到 FSM），否则兼容旧 resizingCellRef 流程；
+ *   - 连线模式：点击节点作为起点/终点并调用 ensureEdge。
+ *
+ * 事件约定：
+ * - 对输入控件（textarea/input/contentEditable）不拦截，避免影响编辑体验；
+ * - 其他区域 pointerdown 会 preventDefault + stopPropagation，防止画布层误吃事件。
+ *
+ * 坐标约定：
+ * - getScreenFromWrap：将 client 坐标映射为 canvas screen(px)（考虑 wrap.scroll 与 DPR）。
+ */
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'

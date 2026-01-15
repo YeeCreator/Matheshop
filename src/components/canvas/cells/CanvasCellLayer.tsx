@@ -1,3 +1,16 @@
+/**
+ * CanvasCellLayer
+ *
+ * 负责在可滚动 workspace 中渲染所有 cell 的顶层 React Layer：
+ * - 将 cell 的 world 坐标通过 camera 投影，并结合 canvas/wrap 的尺寸与滚动偏移换算为 CSS 坐标；
+ * - 递归渲染 cell 树（通过 `renderChild` 回调继续下钻）；
+ * - 将选择、编辑、hover port、连线模式、拖拽边、缩放等交互状态集中下发给 `CanvasCell`。
+ *
+ * 坐标系统说明：
+ * - worldToScreen 使用 canvas 像素坐标；
+ * - 本层将 canvas 像素进一步换算为 workspace 内 CSS 像素，并扣除 wrap 的 scroll 偏移，
+ *   从而得到“视口内”的定位（用于绝对定位 DOM cell）。
+ */
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'

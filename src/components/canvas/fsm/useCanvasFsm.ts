@@ -1,5 +1,14 @@
-// 画布交互 FSM：React 适配层
-// 目标：提供 dispatch(event) + 产出 commands 由 CanvasBoard 执行。
+/**
+ * useCanvasFsm.ts
+ *
+ * 画布交互 FSM 的 React 适配层：
+ * - 通过 useReducer 驱动 state/ctx 的演进；
+ * - 每次 dispatch 前合并外部最新 camera（用于坐标换算一致性）及外部 selection/modes（渐进迁移期对齐）；
+ * - reducer 产出的 commands 通过 onCommands 回调交由 CanvasBoard 执行（副作用落地层）。
+ *
+ * 目标：
+ * - 将 CanvasBoard 中分散的互斥交互逻辑逐步迁移到 FSM，同时保持现有外部 state 不被强制重构。
+ */
 
 import { useCallback, useMemo, useReducer } from 'react'
 import type { Camera } from '../utils/geometry'

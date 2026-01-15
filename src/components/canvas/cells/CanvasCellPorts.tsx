@@ -1,3 +1,14 @@
+/**
+ * CanvasCellPorts
+ *
+ * 渲染 cell 四个方向的连接端口（n/e/s/w）并处理连线拖拽起点：
+ * - 端口位置基于 `cellSize` 计算（相对 cell 左上角的局部坐标）；
+ * - hover 状态由上层维护（`hoverPort` / `setHoverPort`）；
+ * - PointerDown 时：
+ *   1) 在 canvas 上进行 pointer capture，保证拖拽过程中持续接收事件；
+ *   2) 将浏览器 client 坐标换算为 canvas screen 坐标（考虑 wrap 滚动）；
+ *   3) 再将 screen 坐标转换为 world 坐标，写入 `draggingEdgeRef`，由上层渲染连线/命中测试。
+ */
 import React from 'react'
 import type { CellId, PortSide } from '../../cellTypes'
 import type { Camera } from '../utils/geometry'

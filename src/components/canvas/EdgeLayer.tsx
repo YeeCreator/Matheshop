@@ -1,3 +1,15 @@
+/**
+ * EdgeLayer.tsx
+ *
+ * 边（edges）的 SVG 渲染层：
+ * - 将 cell 的端口/中心点从 world 坐标转换为 workspace 内的 CSS 像素坐标；
+ * - 为每条边生成三次贝塞尔曲线路径并渲染为 <path>；
+ * - 支持点击选中边（需 CSS 开启 edge-layer 的 pointer-events）；
+ * - 支持拖拽连线时的预览路径（draggingEdge）。
+ *
+ * 坐标换算：
+ * world -> screen(px, 基于 camera) -> CSS(px, 结合 canvas 实际像素与 DOM 尺寸) -> 扣除 wrap scroll。
+ */
 import type React from 'react'
 import type { CanvasEdge, CellId, CellNode, PortSide } from '../cellTypes'
 import { collectCellWorldHits, findCellById } from './domain/cellTree'
