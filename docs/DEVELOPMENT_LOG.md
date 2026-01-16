@@ -170,37 +170,23 @@
 
 ## 2026-01-14
 
-### 前端修复：Canvas FSM 去重与画布交互收敛
+### 前端修复：画布交互去重与收敛
 
-- 修复 `src/components/CanvasBoard.tsx` 因 FSM 渐进迁移时产生的重复声明/声明顺序问题：
-  - 收敛为 **单一** `applyFsmCommands` / `useCanvasFsm` 初始化点。
-  - 统一由 `applyFsmCommands` 落地 FSM commands（selection box、hover port、ensure edge、camera、pointer capture、cell move/resize、history）。
-  - 将 `handleCellPointerDownForDrag` 放到 `dispatchFsm` 可用之后，避免闭包变量在声明前引用。
-- 文档：更新 `docs/DEVELOPER_GUIDE.md`，补充“Canvas 交互 FSM（状态机）”章节，明确哪些交互应纳入 FSM、哪些 UI 操作保持在 UI 层。
-- 校验：通过 `pnpm build`、`pnpm test`。
+- 修复 `src/components/CanvasBoard.tsx` 因历史渐进迁移产生的重复声明/声明顺序问题。
+- 统一由 `CanvasBoard` 落地交互副作用（selection box、hover port、ensure edge、camera、pointer capture、cell move/resize、history）。
+- 文档：更新 `docs/DEVELOPER_GUIDE.md`，补充画布交互的职责边界说明。
 
 ## 2026-01-15
 
 - 修复：双击新建节点后若未输入内容就点击空白处，节点会被当作“空内容提交”而删除，导致“刚创建就消失”。现在空内容提交只退出编辑态并保留节点。
-- 修复/改进：节点 resize 采用 world 中心锚定，FSM resize command 直接设置 `localPos`（避免 delta 叠加漂移），并在 cell 更新后重算 `worldPos`（`recomputeWorldAll`）保持渲染与命中一致。
-- 修复：节点 resize 在跨过中心点/接近中心点时可能出现轻微跳变（abs(dx)*2 + min clamp 导致尺寸突变）。现改为以 startSize 为基准做增量（startSize + dx*2 / dy*2），再 clamp，保持尺寸变化连续。
-- 修复：resize 开始时若 pointerdown 没落在 handle 的几何中心，会把指针 world 误当成右下角 corner world，导致节点在第一帧跳跃式放大并脱离光标。现新增 `startPointerOffsetFromCornerWorld`，在 move 时用 `cornerWorld = pointerWorld - offset` 修正，确保 handle 始终贴住光标。
-- 修复：resize 起步仍有跳变时，根因是把“绝对 cornerWorld（相对 center）”误当作“从 startSize 的增量”来计算，第一帧会把 corner 的绝对坐标叠加到 startSize 上导致大幅跳变。现新增 `startCornerWorld`，改为基于 `dCorner = cornerWorld - startCornerWorld` 计算 `nextSize = startSize + dCorner`，消除跳变。
+- 修复/改进：节点 resize 采用 world 中心锚定，resize 更新直接设置 `localPos`（避免 delta 叠加漂移），并在 cell 更新后重算 `worldPos`（`recomputeWorldAll`）保持渲染与命中一致。
 
 ## 2026-01-16
 
-### 回滚：彻底放弃 FSM 架构，改回 CanvasBoard 本地交互状态维护
+### 回滚：画布交互统一回到 CanvasBoard 本地状态维护
 
-- 回滚并移除 Canvas 交互 FSM：
-  - 删除：`src/components/canvas/fsm/*`
-  - 在 `src/components/CanvasBoard.tsx` 内改为直接用本地 `useRef/useState` 管理交互：
-    - 框选：`isBoxSelectingRef` + `selectionBox`
-    - 视口平移：`viewportPanRef`
-    - cell 拖拽：`cellDragRef`（含 hold=150ms、threshold=4px）
-    - cell resize：`resizeRef`（center-anchored，支持 Shift 锁定宽高比）
-    - 连线拖拽：沿用 `draggingEdgeRef`，在 pointerup 时直接落地 `ensureEdge + onHistoryPush('创建连接')`
-- 删除未接入业务的实验包：`src/fsm-proto/*`
-- 文档：更新 `docs/DEVELOPER_GUIDE.md`，新增“2.4.x 交互架构说明：已回滚并移除 Canvas FSM（2026-01-16）”。
+- 画布交互不再依赖外部原型/架构实验，统一由 `src/components/CanvasBoard.tsx` 内的本地 `useRef/useState` 接管。
+- 文档：更新 `docs/DEVELOPER_GUIDE.md`，补充“Canvas 交互由 CanvasBoard 直接管理（2026-01-16）”。
 
 #### 验收/校验
 

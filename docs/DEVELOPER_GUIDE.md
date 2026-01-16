@@ -390,16 +390,13 @@ pnpm desktop:dist
 - Electron 会自己启动 Vite（脚本里用 concurrently）
 - 这种方式最省心，但你就不需要再单独点 `pnpm dev`
 
-## 2.4.x 交互架构说明：已回滚并移除 Canvas FSM（2026-01-16）
+## 2.4.x 交互架构说明：Canvas 交互由 CanvasBoard 直接管理（2026-01-16）
 
-> 结论：仓库已彻底放弃 FSM 架构（包含实验性 `src/fsm-proto/*` 与 Canvas 交互层 `src/components/canvas/fsm/*`）。
+### 现状
 
-### 发生了什么
+- 画布交互（框选、视口平移、cell 拖拽、cell resize、连线拖拽）统一由 `src/components/CanvasBoard.tsx` 直接维护本地 `useRef/useState`。
 
-- 历史上一度尝试将画布的“互斥主交互”收敛为一个 reducer/FSM，并通过 commands 协议把副作用交回 `CanvasBoard` 落地。
-- **目前已回滚到“原来的方式”**：所有画布交互（框选、视口平移、cell 拖拽、cell resize、连线拖拽）均由 `src/components/CanvasBoard.tsx` 直接维护本地 `useRef/useState` 来驱动。
-
-### 现在应该怎么改交互
+### 修改交互的入口
 
 - 入口文件：`src/components/CanvasBoard.tsx`
 - 关键状态（refs）：

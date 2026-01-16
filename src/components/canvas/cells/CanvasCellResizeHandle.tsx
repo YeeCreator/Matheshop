@@ -4,9 +4,7 @@
  * cell 右下角缩放把手：
  * - `isVisible` 为 false 时不渲染；
  * - PointerDown 时将 client 坐标换算为 canvas screen 再换算为 world，用于后续 resize 计算；
- * - 支持渐进迁移：
- *   - 若传入 `onResizeStart`，则将 resize 起始信息交由上层 FSM/状态机处理；
- *   - 否则走旧逻辑：在 canvas 上 pointer capture，并写入 `resizingCellRef` 以维持兼容。
+ * - 若传入 `onResizeStart`，则把 resize 起始信息交给上层（CanvasBoard）接管；否则走兼容逻辑：在 canvas 上 pointer capture，并写入 `resizingCellRef`。
  *
  * 备注：`startCenterWorld` 由上层 CanvasCell 计算传入，用于以中心点为基准的缩放/约束策略。
  */
@@ -33,7 +31,7 @@ export type CanvasCellResizeHandleProps = {
       }
   >
 
-  /** 渐进迁移：由上层接管 resize 的状态机（FSM） */
+  /** 由上层接管 resize 起点与后续 move/up 处理 */
   onResizeStart?: (args: {
     pointerId: number
     cellId: string
@@ -89,7 +87,7 @@ export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProp
           startCenterWorld,
         }
 
-        // 已迁移：交给上层 FSM
+        // 交给上层处理
         if (onResizeStart) {
           onResizeStart(payload)
           return

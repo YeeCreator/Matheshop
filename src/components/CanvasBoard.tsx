@@ -5,8 +5,7 @@
  * - 管理 camera（world<->screen）与可滚动 workspace（wrap）之间的坐标换算；
  * - 管理三类可视对象与其交互：cells（文本块/组）、edges（连线）、formulas（KaTeX 公式）；
  * - 统一处理全局输入（wheel 缩放/平移、Esc 取消、L 连线模式、双击新建 cell 等）；
- * - 渐进迁移：将互斥主交互（框选/拖拽/缩放/视口操作/连线拖拽）交给 Canvas FSM，
- *   由 reducer 产出 commands，本组件负责执行 commands 并落地到 React state。
+ * - 画布交互（框选/拖拽/缩放/视口操作/连线拖拽）由本组件内的本地交互状态（refs/state）直接管理。
  *
  * 坐标约定：
  * - client（浏览器坐标）→ workspace CSS（考虑 wrap.scroll）→ canvas screen(px，考虑 DPR) → world（逻辑坐标）。
@@ -126,10 +125,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
   const dragStartTimerRef = useRef<number | null>(null)
 
-  // --- 交互 FSM（渐进迁移：接入框选/连线/视口/节点拖拽/缩放）---
-  // 移除仍残留的 applyFsmCommands + useCanvasFsm 全块（已回滚到本地 refs/state）
-
-  // 新增：用于回滚后的本地交互状态（替代 fsm.state）
+  // --- 交互状态（refs/state）---
   const viewportPanRef = useRef<null | {
   pointerId: number
   startScreen: { x: number; y: number }
@@ -651,19 +647,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     [],
   )
 
-  // --- 交互 FSM（渐进迁移：接入框选/连线/视口/节点拖拽/缩放）---
-  // const { model: fsm, dispatch: dispatchFsm } = useCanvasFsm({
-  //   camera: cameraRef.current,
-  //   getFreshCamera: () => ({ ...cameraRef.current }),
-  //   onCommands: applyFsmCommands,
-  //   externalSelectedCellId: selectedCellId,
-  //   externalSelectedEdgeId: selectedEdgeId,
-  //   externalSelectedFormulaId: selectedFormulaId,
-  //   externalMultiSelectedIds: multiSelectedIds,
-  //   externalIsLinkMode: isLinkMode,
-  //   externalLinkFromId: linkFromId,
-  // })
-
+  // --- 交互状态（refs/state）---
   // handleCellPointerDownForDrag：改为写入本地 cellDragRef，并使用 timer 完成 holdReady
   const handleCellPointerDownForDrag = useCallback(
     (args: {
@@ -701,7 +685,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     [],
     )
 
-  // handlePointerDown：移除 dispatchFsm，改为本地处理
+  // handlePointerDown：本地处理
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -775,7 +759,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (!canvas) return
 
     // 双击创建节点：避免在连线/平移/拖拽/框选等状态下误触
-    // handleDoubleClick：不再依赖 fsm.state.tag
+    // handleDoubleClick：不依赖任何外部状态机，按当前 refs/state 判定是否允许创建
     if (isLinkMode) return
     if (isSpaceDown || viewportPanRef.current) return
     if (draggingFormulaRef.current) return
@@ -851,7 +835,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
       // 以中心为锚点：corner 偏移决定 half-size
       const halfW = Math.max(12, Math.abs(pointerAtCorner.x - r.startCenterWorld.x))
-      let nextW = halfW * 2
+      const nextW = halfW * 2
       let nextH = Math.max(12, Math.abs(pointerAtCorner.y - r.startCenterWorld.y)) * 2
 
       if (e.shiftKey) {
@@ -886,7 +870,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       return
     }
 
-    // 拖拽连线：保持原本 draggingEdgeRef 流程，但不再同步到 FSM
+    // 拖拽连线：保持 draggingEdgeRef 流程（无状态机同步）
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
       const screen = getScreenFromWrap(e.clientX, e.clientY)
@@ -1100,7 +1084,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
     }
 
-  // wheel：不再 dispatchFsm，直接本地更新 camera
+  // wheel：直接本地更新 camera
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
@@ -1281,7 +1265,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             canvasRefForPointerCapture={canvasRef}
             dragStartTimerRef={dragStartTimerRef}
             draggingCellPointerDown={handleCellPointerDownForDrag}
-            // CanvasCellLayer.onResizeStart：不再 dispatchFsm，改为写入本地 resizeRef 并 capture pointer
+            // CanvasCellLayer.onResizeStart：写入本地 resizeRef 并 capture pointer
             onResizeStart={(args: Parameters<NonNullable<React.ComponentProps<typeof CanvasCellLayer>['onResizeStart']>>[0]) => {
               const canvas = canvasRef.current
               if (!canvas) return
