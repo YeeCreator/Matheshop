@@ -1,0 +1,8 @@
+# Runtime deps for the HTTP server wrapper around symcalc
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.8.0
+
+# Local editable install of the pure computation engine
+-e ../SymbolicComputationEngine
+
