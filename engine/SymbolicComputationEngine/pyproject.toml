@@ -1,0 +1,11 @@
+[project]
+name = "symcalc"
+version = "0.1.0"
+description = "SymbolicComputationEngine (Matheshop): pure symbolic/arithmetic computation core library"
+requires-python = ">=3.13"
+
+[tool.black]
+line-length = 120
+
+[tool.ruff]
+line-length = 120
