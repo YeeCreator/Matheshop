@@ -9,10 +9,22 @@ import {
   type EngineSelectionState,
 } from './engine/engineSelection'
 import './App.css'
-
-// 使用 main-ui-react 的 UI 外壳组件（顶部工具条 + 左右侧栏 + 中心内容区）
-// 说明：这里不引入其 SidebarModel 渲染能力，先用 ReactNode 插槽承载 matheshop 现有面板，降低迁移风险。
-import { MatchFrame, Panel, Toolbar } from 'main-ui-react'
+import {
+  Button,
+  ContentShell,
+  IconButton,
+  List,
+  ListItem,
+  MutedText,
+  Panel,
+  Row,
+  TextArea,
+  ToolbarLabel,
+  ToolbarSeparator,
+  ToolbarTitle,
+  Toolbar,
+  MatchFrame,
+} from 'main-ui-react'
 
 const TOOL_LABELS: Record<Tool, string> = {
   text: '文本/公式',
@@ -124,57 +136,38 @@ function App() {
           <Toolbar
             left={
               <>
-                <strong className="top-toolbar__title">Matheshop</strong>
-                <span className="top-toolbar__sep" />
-                <button type="button" className="top-toolbar__btn" onClick={() => setClearToken((x) => x + 1)}>
-                  清空
-                </button>
-
-                <label className="top-toolbar__label">
-                  文本颜色
+                <ToolbarTitle>Matheshop</ToolbarTitle>
+                <ToolbarSeparator />
+                <Button onClick={() => setClearToken((x) => x + 1)}>清空</Button>
+                <ToolbarLabel label="文本颜色">
                   <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-                </label>
+                </ToolbarLabel>
               </>
             }
             right={
-              <button
+              <IconButton
                 ref={settingsButtonRef}
-                type="button"
-                className="settings-gear settings-gear--toolbar"
                 aria-label="设置"
                 aria-expanded={false}
                 onClick={openSettings}
               >
                 ⚙
-              </button>
+              </IconButton>
             }
           />
         )
       }
       leftSidebar={
         activeView === 'settings' ? null : (
-          <div>
-            <Panel title="工具" style={{ marginBottom: 12 }}>
-              <ul className="tool-list">
-                {toolItems.map((t) => (
-                  <li
-                    key={t}
-                    className="tool-item"
-                    onClick={() => setTool(t)}
-                    style={{
-                      fontWeight: tool === t ? 700 : 400,
-                      background: tool === t ? 'rgba(0,0,0,0.05)' : undefined,
-                      borderRadius: 8,
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    {TOOL_LABELS[t]}
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          </div>
+          <Panel title="工具">
+            <List>
+              {toolItems.map((t) => (
+                <ListItem key={t} onClick={() => setTool(t)} selected={tool === t}>
+                  {TOOL_LABELS[t]}
+                </ListItem>
+              ))}
+            </List>
+          </Panel>
         )
       }
       center={
@@ -187,15 +180,13 @@ function App() {
           />
 
           {activeView === 'settings' ? null : (
-            <div className="main-content">
-              <div className="canvas-toolbar">
-                <span className="small-muted">
-                  提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本
-                </span>
-              </div>
+            <ContentShell>
+              <Row wrap>
+                <MutedText>提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</MutedText>
+              </Row>
 
               <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
-            </div>
+            </ContentShell>
           )}
         </>
       }
@@ -221,19 +212,17 @@ function App() {
             </Panel>
 
             <Panel title="图层">
-              <ul className="layer-list">
+              <List>
                 {layers.map((l) => (
-                  <li key={l} className="layer-item">
-                    {l}
-                  </li>
+                  <ListItem key={l}>{l}</ListItem>
                 ))}
-              </ul>
+              </List>
             </Panel>
 
             <Panel title="历史记录">
-              <textarea
-                className="history-textbox"
+              <TextArea
                 readOnly
+                monospace
                 value={
                   history.length === 0
                     ? '暂无'
