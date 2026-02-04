@@ -198,3 +198,15 @@
   - cell 拖拽（按住-移动阈值后开始拖拽，松手释放 pointer capture）
   - cell resize（拖拽右下角手柄，Shift 锁比）
   - 连线拖拽（松手创建连接并写入历史）
+
+## 2026-02-04
+
+- 主界面 UI 壳迁移：`matheshop` 开始直接复用工作区本地包 `main-ui-react`（`MatchFrame` + `Toolbar`），替换原有的顶部工具条与左右侧栏布局实现。
+- 约束：中间 2D 视口 `CanvasBoard` 组件与其事件/数据流保持不变，仅调整外层承载结构。
+- 工程：在 `matheshop/package.json` 增加 `"main-ui-react": "file:../main-ui-react"` 依赖。
+
+## 2026-02-04（补充）
+
+- 主界面 UI 进一步收敛到 `main-ui-react`：
+  - `main-ui-react/MatchFrame` 侧栏容器支持 `padding/background/bordered` 参数化，侧栏外观不再依赖 `matheshop/styles.css` 的 `.sidebar`。
+  - `main-ui-react/Panel` 提供统一的面板（分组块）外观，`matheshop` 右侧栏的 Inspector/图层/历史以 `Panel` 组织。

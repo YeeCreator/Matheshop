@@ -19,7 +19,8 @@
   "dependencies": {
     "katex": "^0.16.27",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "main-ui-react": "file:../main-ui-react"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

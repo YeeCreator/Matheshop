@@ -10,6 +10,10 @@ import {
 } from './engine/engineSelection'
 import './App.css'
 
+// 使用 main-ui-react 的 UI 外壳组件（顶部工具条 + 左右侧栏 + 中心内容区）
+// 说明：这里不引入其 SidebarModel 渲染能力，先用 ReactNode 插槽承载 matheshop 现有面板，降低迁移风险。
+import { MatchFrame, Panel, Toolbar } from 'main-ui-react'
+
 const TOOL_LABELS: Record<Tool, string> = {
   text: '文本/公式',
 }
@@ -96,93 +100,127 @@ function App() {
   }
 
   return (
-    <div className="container">
-      {activeView === 'settings' ? null : (
-        <div className="top-toolbar" role="toolbar" aria-label="主工具条">
-          <div className="top-toolbar__left">
-            <strong className="top-toolbar__title">Matheshop</strong>
-            <span className="top-toolbar__sep" />
-            <button type="button" className="top-toolbar__btn" onClick={() => setClearToken((x) => x + 1)}>
-              清空
-            </button>
+    <MatchFrame
+      layout={{
+        // 宿主（matheshop）本身已让 #root/body 100% 高度，这里保持 main-ui-react 默认的 viewport 高度策略
+        heightMode: 'viewport',
+        leftSidebar: {
+          width: 220,
+          scroll: true,
+          padding: 12,
+          background: 'rgba(255,255,255,0.92)',
+          bordered: true,
+        },
+        rightSidebar: {
+          width: 360,
+          scroll: true,
+          padding: 12,
+          background: 'rgba(255,255,255,0.92)',
+          bordered: true,
+        },
+      }}
+      toolbar={
+        activeView === 'settings' ? null : (
+          <Toolbar
+            left={
+              <>
+                <strong className="top-toolbar__title">Matheshop</strong>
+                <span className="top-toolbar__sep" />
+                <button type="button" className="top-toolbar__btn" onClick={() => setClearToken((x) => x + 1)}>
+                  清空
+                </button>
 
-            <label className="top-toolbar__label">
-              文本颜色
-              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-            </label>
+                <label className="top-toolbar__label">
+                  文本颜色
+                  <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+                </label>
+              </>
+            }
+            right={
+              <button
+                ref={settingsButtonRef}
+                type="button"
+                className="settings-gear settings-gear--toolbar"
+                aria-label="设置"
+                aria-expanded={false}
+                onClick={openSettings}
+              >
+                ⚙
+              </button>
+            }
+          />
+        )
+      }
+      leftSidebar={
+        activeView === 'settings' ? null : (
+          <div>
+            <Panel title="工具" style={{ marginBottom: 12 }}>
+              <ul className="tool-list">
+                {toolItems.map((t) => (
+                  <li
+                    key={t}
+                    className="tool-item"
+                    onClick={() => setTool(t)}
+                    style={{
+                      fontWeight: tool === t ? 700 : 400,
+                      background: tool === t ? 'rgba(0,0,0,0.05)' : undefined,
+                      borderRadius: 8,
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    {TOOL_LABELS[t]}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
           </div>
+        )
+      }
+      center={
+        <>
+          <SettingsPanel
+            open={activeView === 'settings'}
+            onClose={closeSettings}
+            engineSelection={engineSelection}
+            onChangeEngineChoice={(choice) => setEngineSelection((prev) => ({ ...prev, choice }))}
+          />
 
-          <div className="top-toolbar__right">
-            <button
-              ref={settingsButtonRef}
-              type="button"
-              className="settings-gear settings-gear--toolbar"
-              aria-label="设置"
-              aria-expanded={false}
-              onClick={openSettings}
-            >
-              ⚙
-            </button>
-          </div>
-        </div>
-      )}
+          {activeView === 'settings' ? null : (
+            <div className="main-content">
+              <div className="canvas-toolbar">
+                <span className="small-muted">
+                  提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本
+                </span>
+              </div>
 
-      <SettingsPanel
-        open={activeView === 'settings'}
-        onClose={closeSettings}
-        engineSelection={engineSelection}
-        onChangeEngineChoice={(choice) => setEngineSelection((prev) => ({ ...prev, choice }))}
-      />
-
-      {activeView === 'settings' ? null : (
-        <div className="content-row">
-          <div className="sidebar left-sidebar">
-            <ul className="tool-list">
-              {toolItems.map((t) => (
-                <li
-                  key={t}
-                  className="tool-item"
-                  onClick={() => setTool(t)}
-                  style={{
-                    fontWeight: tool === t ? 700 : 400,
-                    background: tool === t ? '#e0e0e0' : undefined,
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {TOOL_LABELS[t]}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="main-content">
-            <div className="canvas-toolbar">
-              <span className="small-muted">提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</span>
+              <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
             </div>
+          )}
+        </>
+      }
+      rightSidebar={
+        activeView === 'settings' ? null : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Panel title="Inspector">
+              <InspectorPanel
+                active={
+                  inspector.activeInlineEditor
+                    ? {
+                        cellId: inspector.activeInlineEditor.cellId,
+                        selection: inspector.activeInlineEditor.selection,
+                        draft: inspector.activeInlineEditor.draft,
+                      }
+                    : null
+                }
+                tokens={null}
+                onChangeDraft={requestDraftChange}
+                onApply={requestApply}
+                onCancel={requestCancel}
+              />
+            </Panel>
 
-            <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
-          </div>
-
-          <div className="sidebar right-sidebar">
-            <InspectorPanel
-              active={
-                inspector.activeInlineEditor
-                  ? {
-                      cellId: inspector.activeInlineEditor.cellId,
-                      selection: inspector.activeInlineEditor.selection,
-                      draft: inspector.activeInlineEditor.draft,
-                    }
-                  : null
-              }
-              tokens={null}
-              onChangeDraft={requestDraftChange}
-              onApply={requestApply}
-              onCancel={requestCancel}
-            />
-
-            <div className="panel">
-              <h3>图层</h3>
+            <Panel title="图层">
               <ul className="layer-list">
                 {layers.map((l) => (
                   <li key={l} className="layer-item">
@@ -190,10 +228,9 @@ function App() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </Panel>
 
-            <div className="panel">
-              <h3>历史记录</h3>
+            <Panel title="历史记录">
               <textarea
                 className="history-textbox"
                 readOnly
@@ -207,11 +244,11 @@ function App() {
                         .join('\n')
                 }
               />
-            </div>
+            </Panel>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    />
   )
 }
 

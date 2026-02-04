@@ -729,3 +729,26 @@ pnpm build
   - **若内容非空**：会退出编辑态，并根据最终内容估算尺寸、解析 blocks 并写入历史记录。
 
 > 备注：如果后续需要“空内容自动删除”的模式，可以引入显式的删除操作（例如 Backspace/Delete 或右键菜单），而不是在提交时隐式删除。
+
+## 主界面 UI 外壳（main-ui-react）
+
+为降低主界面布局代码的耦合度，`matheshop` 目前直接复用工作区内的本地组件包 `main-ui-react`，用于提供：顶部工具条、左侧栏、右侧栏与中心内容区的基础布局外壳。
+
+### 设计约束
+
+- **中间 2D 视口（`CanvasBoard`）不做改动**：仅调整其外层承载结构，确保缩放/平移/编辑等交互逻辑不受影响。
+- 先采用 **ReactNode 插槽** 承载 `matheshop` 现有面板（Inspector/图层/历史等），暂不强制改造成 `SidebarModel`（后续可逐步演进）。
+
+### 关键文件
+
+- `src/App.tsx`：使用 `MatchFrame` 与 `Toolbar` 组织主界面布局。
+- `main-ui-react/src/MatchFrame.tsx`：三栏 + 顶部工具条布局骨架。
+- `main-ui-react/src/Toolbar.tsx`：顶部工具条插槽组件。
+
+### 依赖与开发方式
+
+`matheshop/package.json` 通过本地依赖的方式引用：
+
+- `"main-ui-react": "file:../main-ui-react"`
+
+注意：`main-ui-react` 的产物在 `dist/`，如在开发中修改了 `main-ui-react` 源代码，需要在其项目内执行构建以刷新导出。
