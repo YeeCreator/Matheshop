@@ -31,6 +31,13 @@ import {
   resizeCanvasToDisplaySize,
   screenToWorld,
 } from './canvas/utils/geometry'
+// 新增：viewport-kit 相机交互（作为唯一的 camera 状态来源）
+import { useViewportCamera } from 'viewport-kit'
+import {
+  camera2DToLegacy,
+  getDprScaleFromCanvas,
+  legacyToCamera2D,
+} from './canvas/utils/viewportKitAdapter'
 import { parseBlocksFromText } from './canvas/utils/blocks'
 
 import type { InlineSelection } from './canvas/exprSelection'
@@ -52,7 +59,7 @@ export type CanvasBoardProps = {
   requestClearToken: number
 }
 
-type Stroke = {
+interface Stroke {
   id: string
   tool: 'brush' | 'eraser'
   color: string
@@ -93,7 +100,49 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const redoRef = useRef<Stroke[]>([])
   const backgroundRef = useRef<string>('#ffffff')
 
+  // 旧 camera 仍保留（下游 layer 目前依赖它），但其值将由 viewport-kit camera2d 派生。
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
+
+  // 记录最近一次鼠标位置（容器本地 CSS 像素），用于某些设备上 ctrl+wheel 的锚点推断。
+  const lastCursorLocalRef = useRef<{ x: number; y: number } | null>(null)
+
+  // viewport-kit camera（权威相机）
+  const viewport = useViewportCamera({
+    containerRef: wrapRef,
+    // matheshop 没有固定世界边界，fit 行为只用于初始化 scale；这里给一个足够大的 viewBox。
+    viewBox: { x: -5000, y: -5000, width: 10000, height: 10000 },
+    paddingPx: 0,
+    minScaleFactor: 0.08,
+    maxScaleFactor: 64,
+    wheelZoomSpeed: 0.0028,
+    wheelPanSpeed: 1.0,
+    getCursorLocal: () => lastCursorLocalRef.current,
+    interactionMode: {
+      // 与现有交互一致：
+      // - 普通 wheel：平移
+      // - ctrl/meta + wheel：缩放（锚点在光标处）
+      // - 拖拽平移：仍由原有中键/空格逻辑负责（避免和 cell 左键拖拽冲突）
+      dragPan: false,
+      wheelPan: true,
+      ctrlWheelZoom: true,
+      pinchZoom: true,
+      wheelZoomAnchor: 'cursor',
+    },
+  })
+
+  const { camera: camera2d, setCamera: setCamera2d, handlers: viewportHandlers } = viewport
+
+  // 相机同步：camera2d -> legacy cameraRef（供旧逻辑使用）
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dprScale = getDprScaleFromCanvas(canvas)
+    cameraRef.current = camera2DToLegacy(camera2d, { dprScale })
+    // 注意：这里不直接 scheduleRender，因为 setCamera2d 已经会触发组件重渲染；
+    // 但 CanvasBoard 渲染主循环是手动调度，所以仍需要触发。
+    scheduleRender()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera2d.pan.x, camera2d.pan.y, camera2d.scale])
 
   const [formulas, setFormulas] = useState<FormulaItem[]>([])
 
@@ -815,6 +864,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    lastCursorLocalRef.current = getLocalFromWrap(e.clientX, e.clientY)
+
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -1084,51 +1135,60 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
     }
 
-  // wheel：直接本地更新 camera
+  // 新增：把 client 坐标转换为容器本地 CSS 像素（用于 viewport-kit）
+  const getLocalFromWrap = useCallback(
+    (clientX: number, clientY: number) => {
+      const wrap = wrapRef.current
+      if (!wrap) return null
+      const rect = wrap.getBoundingClientRect()
+      return { x: clientX - rect.left, y: clientY - rect.top }
+    },
+    [],
+  )
+
+  // wheel：改为交给 viewport-kit 处理；同时保持 shift+wheel 横向平移的旧体验。
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
 
     const onWheel = (ev: WheelEvent) => {
+      // 总是拦截，避免浏览器页面缩放/回弹等默认行为。
       ev.preventDefault()
 
-      const screen = getScreenFromWrap(ev.clientX, ev.clientY)
-      if (!screen) return
+      const local = getLocalFromWrap(ev.clientX, ev.clientY)
+      if (local) lastCursorLocalRef.current = local
 
-      const cam = cameraRef.current
       const isZoomGesture = ev.ctrlKey || ev.metaKey
-
       if (ev.shiftKey && !isZoomGesture) {
-        cameraRef.current = { ...cam, x: cam.x + ev.deltaY / cam.zoom }
-        scheduleRender()
+        // 与旧逻辑一致：shift+wheel 主要用于横向平移。
+        // viewport-kit 的 wheelPan 是按 deltaX/deltaY 平移，这里把 deltaY 映射到 deltaX。
+        const canvas = canvasRef.current
+        if (canvas) {
+          const dprScale = getDprScaleFromCanvas(canvas)
+          const legacy = cameraRef.current
+          const nextLegacy: Camera = { ...legacy, x: legacy.x + ev.deltaY / legacy.zoom }
+          setCamera2d(legacyToCamera2D(nextLegacy, { dprScale }))
+        }
         return
       }
 
-      if (!isZoomGesture) {
-        cameraRef.current = { ...cam, x: cam.x + ev.deltaX / cam.zoom, y: cam.y + ev.deltaY / cam.zoom }
-        scheduleRender()
-        return
-      }
-
-      const zoomIntensity = 0.0028
-      const factor = Math.exp(-ev.deltaY * zoomIntensity)
-      const nextZoom = Math.min(64, Math.max(0.08, cam.zoom * factor))
-
-      cameraRef.current = {
-        zoom: nextZoom,
-        x: (cam.x + screen.x / cam.zoom) - screen.x / nextZoom,
-        y: (cam.y + screen.y / cam.zoom) - screen.y / nextZoom,
-      }
-
+      viewportHandlers.onWheel({
+        ctrlKey: ev.ctrlKey,
+        deltaX: ev.deltaX,
+        deltaY: ev.deltaY,
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        preventDefault: () => ev.preventDefault(),
+      })
       scheduleRender()
     }
 
     wrap.addEventListener('wheel', onWheel, { passive: false })
     return () => wrap.removeEventListener('wheel', onWheel)
-    }, [getScreenFromWrap, scheduleRender])
+  }, [getLocalFromWrap, setCamera2d, viewportHandlers, scheduleRender])
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    // 由原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
+    // 由 wrap 的原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
     e.preventDefault()
   }
 
@@ -1220,7 +1280,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             selectedEdgeId={selectedEdgeId}
             draggingEdge={draggingEdgeRef.current}
             cells={cells}
-            camera={cameraRef.current}
+            camera={camera2d}
             canvasEl={canvasRef.current}
             wrapEl={wrapRef.current}
             getPortWorld={getPortWorld}

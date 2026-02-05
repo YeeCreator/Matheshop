@@ -8,12 +8,13 @@
  * - 支持拖拽连线时的预览路径（draggingEdge）。
  *
  * 坐标换算：
- * world -> screen(px, 基于 camera) -> CSS(px, 结合 canvas 实际像素与 DOM 尺寸) -> 扣除 wrap scroll。
+ * - viewport-kit：world -> screen(CSS px, 基于 camera2d)
  */
 import type React from 'react'
 import type { CanvasEdge, CellId, CellNode, PortSide } from '../cellTypes'
 import { collectCellWorldHits, findCellById } from './domain/cellTree'
-import { worldToScreen, type Camera } from './utils/geometry'
+import type { Camera2D } from 'viewport-kit'
+import { worldToLocalCss } from './utils/viewportCoords'
 
 export type EdgeLayerProps = {
   edges: CanvasEdge[]
@@ -29,7 +30,7 @@ export type EdgeLayerProps = {
       }
 
   cells: CellNode[]
-  camera: Camera
+  camera: Camera2D
 
   canvasEl: HTMLCanvasElement | null
   wrapEl: HTMLDivElement | null
@@ -44,18 +45,11 @@ export default function EdgeLayer(props: EdgeLayerProps) {
 
   if (!canvasEl || !wrapEl) return null
 
-  const canvasRect = canvasEl.getBoundingClientRect()
   const hits = collectCellWorldHits(cells)
 
   const worldToCss = (world: { x: number; y: number }) => {
-    const screenPx = worldToScreen(world, camera)
-    const xCssInWorkspace = (screenPx.x / canvasEl.width) * canvasRect.width
-    const yCssInWorkspace = (screenPx.y / canvasEl.height) * canvasRect.height
-
-    return {
-      x: xCssInWorkspace - wrapEl.scrollLeft,
-      y: yCssInWorkspace - wrapEl.scrollTop,
-    }
+    // 现在使用 viewport-kit 的 camera2d（screen=容器本地 CSS px）。
+    return worldToLocalCss(wrapEl, camera, world)
   }
 
   const portOrCenter = (cellId: CellId, port: PortSide | undefined) => {
@@ -128,4 +122,3 @@ export default function EdgeLayer(props: EdgeLayerProps) {
     </svg>
   )
 }
-

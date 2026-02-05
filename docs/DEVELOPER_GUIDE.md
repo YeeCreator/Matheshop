@@ -752,3 +752,26 @@ pnpm build
 - `"main-ui-react": "file:../main-ui-react"`
 
 注意：`main-ui-react` 的产物在 `dist/`，如在开发中修改了 `main-ui-react` 源代码，需要在其项目内执行构建以刷新导出。
+
+## 2.4.2 视口系统（Viewport）迁移到 viewport-kit（2026-02-05）
+
+为统一不同项目的视口交互体验，并减少维护成本，Matheshop 的视口/相机交互已切换为本地第三方工具包 `viewport-kit-react`（包名：`viewport-kit`）。
+
+### 现状与约定
+
+- **权威相机来源**：`src/components/CanvasBoard.tsx` 内使用 `useViewportCamera()` 作为唯一的相机状态来源（缩放/滚轮平移/触控缩放等）。
+- **兼容旧层渲染**：由于现有 `EdgeLayer` / `CanvasCellLayer` / `FormulaLayer` 仍依赖旧的 `Camera`（`{ x, y, zoom }`）与 `screenToWorld()` 等几何工具，当前保留 `cameraRef.current` 作为 **legacy camera**。
+  - `cameraRef.current` 的值由 viewport-kit 的 `camera2d` 派生而来。
+  - `camera2d` 与 legacy camera 的互相转换在 `src/components/canvas/utils/viewportKitAdapter.ts`。
+
+### 交互行为对齐（与迁移前保持一致）
+
+- 普通滚轮：平移（wheel pan）。
+- Ctrl/⌘ + 滚轮：以光标为锚点缩放（wheel zoom anchor = cursor）。
+- 触控板/触屏：支持 pinch 缩放（若设备提供）。
+- 中键拖拽 / 空格 + 左键拖拽：仍走原有逻辑（避免与 cell 左键拖拽/框选冲突）。
+
+### 后续重构建议
+
+- 若要彻底移除 legacy camera：需要将 `geometry.ts` 与各 Layer 内部的 screen/world 换算逐步替换为 viewport-kit 的坐标/矩阵工具，并收敛所有“容器滚动 + canvas DPR”路径。
+- 如出现缩放锚点不稳定：优先检查 `CanvasBoard.tsx` 中 `lastCursorLocalRef` 的更新是否覆盖了所有 pointer move 场景。

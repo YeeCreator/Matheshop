@@ -210,3 +210,10 @@
 - 主界面 UI 进一步收敛到 `main-ui-react`：
   - `main-ui-react/MatchFrame` 侧栏容器支持 `padding/background/bordered` 参数化，侧栏外观不再依赖 `matheshop/styles.css` 的 `.sidebar`。
   - `main-ui-react/Panel` 提供统一的面板（分组块）外观，`matheshop` 右侧栏的 Inspector/图层/历史以 `Panel` 组织。
+
+## 2026-02-05
+
+- 重构：视口/相机系统迁移到本地第三方工具包 `viewport-kit-react`（包名 `viewport-kit`）。
+  - `CanvasBoard.tsx` 使用 `useViewportCamera()` 作为权威相机来源。
+  - 通过 `src/components/canvas/utils/viewportKitAdapter.ts` 保持与 legacy `Camera{x,y,zoom}` 的兼容，确保 `EdgeLayer/CanvasCellLayer/FormulaLayer` 行为不变。
+  - wheel 平移、Ctrl/⌘+wheel 缩放（光标锚点）、pinch 缩放等行为保持与迁移前一致。
