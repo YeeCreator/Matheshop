@@ -62,7 +62,7 @@ pnpm preview
 ### 2.4 调试建议
 
 - 交互问题优先从 `src/components/CanvasBoard.tsx` 的 pointer/keyboard handler 入手。
-- 坐标系相关 bug：优先检查 `src/components/canvas/utils/geometry.ts` 的 screen/world 换算，以及 CSS 尺寸（wrap 的 bounding box）。
+- 坐标系相关 bug：优先检查 `viewport-kit-react/src/coordinateAdapters.ts`（通过包 `viewport-kit` 导入）与 `src/components/CanvasBoard.tsx` 的相机链路（`camera2d` 与 wrap 本地 CSS 坐标语义）。
 
 ## 2.4.1 Canvas 画布节点（Cell）组件拆分（2026-01-10）
 
@@ -775,3 +775,13 @@ pnpm build
 
 - 若要彻底移除 legacy camera：需要将 `geometry.ts` 与各 Layer 内部的 screen/world 换算逐步替换为 viewport-kit 的坐标/矩阵工具，并收敛所有“容器滚动 + canvas DPR”路径。
 - 如出现缩放锚点不稳定：优先检查 `CanvasBoard.tsx` 中 `lastCursorLocalRef` 的更新是否覆盖了所有 pointer move 场景。
+
+## 2.4.3 网格（Grid）与视口（Viewport）职责边界（2026-03-05）
+
+- 网格是 **world space** 的一部分，语义上等同于“画在地面上的参考线”，必须与 cell/edge/formula 处于同一坐标系。
+- 视口（camera）变化时，网格应与 world 内容一起变化（用户观感为与内容同向缩放、反向平移）。
+- `viewport-kit` 负责通用相机能力（camera 模型、手势、坐标换算、渲染 helper），不承载 Matheshop 的业务网格规则。
+- 在 `src/components/CanvasBoard.tsx` 中，网格可见范围应按 **当前可视容器 `wrap`** 计算：
+  - 使用 `wrap.getBoundingClientRect()` 作为可视宽高输入 `getVisibleWorldBox(camera2d, size)`。
+  - 不要使用 workspace/canvas 的总尺寸去推导“当前可见世界范围”，否则会出现网格与真实视口脱节。
+- 迁移约束：即使后续继续清理 legacy camera/geometry 链路，也必须保持“网格留在 world 空间 + 使用同一 camera 变换”的原则。

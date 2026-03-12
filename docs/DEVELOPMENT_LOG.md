@@ -4,6 +4,20 @@
 
 ## 2026-03-05
 
+### 坐标迁移：相关适配工具全量迁移到 `viewport-kit-react`
+
+- 将 `matheshop` 本地的坐标与相机适配实现迁移到 `viewport-kit-react`：
+  - 新增 `viewport-kit-react/src/coordinateAdapters.ts`
+  - 在 `viewport-kit-react/src/index.ts` 统一导出 `clientToLocalCssPoint/localCssToWorld/worldToLocalCssWithScroll/camera2DToLegacy/legacyToCamera2D/getDprScaleFromCanvas` 等函数。
+- `matheshop` 侧改造：
+  - `CanvasBoard.tsx`、`CanvasCellLayer.tsx`、`CanvasCell.tsx`、`CanvasCellPorts.tsx`、`CanvasCellResizeHandle.tsx`、`FormulaLayer.tsx`、`EdgeLayer.tsx` 全部切换为从 `viewport-kit` 导入坐标与适配工具。
+  - 删除本地重复实现：`src/components/canvas/utils/viewportCoords.ts`、`src/components/canvas/utils/viewportKitAdapter.ts`。
+  - `src/components/canvas/utils/geometry.ts` 精简为仅保留 `clamp` 与 `resizeCanvasToDisplaySize`。
+- 兼容性与验证：
+  - `pnpm run predev` 通过（含 `viewport-kit-react` 与 `main-ui-react` 构建 + 依赖刷新）。
+  - `pnpm build` 通过。
+  - `pnpm run dev:with-dependent` 可启动并成功拉起 Vite（`http://localhost:5173/`）。
+
 ### 安全修复：升级 Rollup 以修复路径穿越导致的任意文件写入风险（CVE-2026-27606）
 
 - 背景：GitHub Dependabot 告警指出依赖树中存在 `rollup 4.54.0`，受影响范围为 `>=4.0.0,<4.59.0`，风险类型为路径穿越（CWE-22）导致的任意文件写入。
@@ -227,3 +241,12 @@
   - `CanvasBoard.tsx` 使用 `useViewportCamera()` 作为权威相机来源。
   - 通过 `src/components/canvas/utils/viewportKitAdapter.ts` 保持与 legacy `Camera{x,y,zoom}` 的兼容，确保 `EdgeLayer/CanvasCellLayer/FormulaLayer` 行为不变。
   - wheel 平移、Ctrl/⌘+wheel 缩放（光标锚点）、pinch 缩放等行为保持与迁移前一致。
+
+## 2026-03-05
+
+### 修复：空白画布时网格不随视口平移/缩放（world-space 网格可见范围计算错误）
+
+- 现象：当画布中没有任何节点时，执行平移/缩放会看到业务节点参考缺失，且网格看起来不跟随视口变化，易误判为视口失效。
+- 根因：`src/components/CanvasBoard.tsx` 的网格可见范围计算使用了 workspace/canvas 尺寸语义，和当前可视口（`wrap`）不一致，导致网格绘制锚定范围与实际观察窗口脱节。
+- 修复：网格仍保持在 world 空间绘制，不迁移到 `viewport-kit`；仅将 `getVisibleWorldBox` 的尺寸输入改为 `wrap.getBoundingClientRect()`，保证网格按当前可视口计算并随 camera 变化。
+- 验证：执行 `pnpm -C C:\Users\Ethan\CoreFiles\ProjectsFile\matheshop build` 通过（`tsc -b && vite build`），无编译错误。

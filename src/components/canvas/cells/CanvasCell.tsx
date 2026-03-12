@@ -11,12 +11,10 @@
  * - 其它区域 pointerdown 会 preventDefault + stopPropagation，防止画布层误吃事件。
  *
  * 坐标约定：
- * - getScreenFromWrap：将 client 坐标映射为 canvas screen(px)（考虑 wrap.scroll 与 DPR）。
+ * - 迁移后统一使用 viewport-kit 的语义：screen = wrap 容器本地 CSS px。
  */
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
-import type { Camera } from '../utils/geometry'
-import { screenToWorld } from '../utils/geometry'
 import CanvasCellPorts from './CanvasCellPorts'
 import CanvasCellResizeHandle from './CanvasCellResizeHandle'
 import CanvasCellBody from './CanvasCellBody'
@@ -26,6 +24,8 @@ import CanvasCellSelectionOutline from './CanvasCellSelectionOutline'
 import CanvasCellDropHint from './CanvasCellDropHint'
 import type { InlineSelection } from '../exprSelection'
 import type { Token } from '../../../../engine/engine_ts/src/index'
+import type { Camera2D } from 'viewport-kit'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
 
 export type CanvasCellProps = {
   cell: CellNode
@@ -36,7 +36,7 @@ export type CanvasCellProps = {
   parentWorld: { x: number; y: number }
   worldNow: { x: number; y: number }
 
-  camera: Camera
+  camera: Camera2D
   wrapEl: HTMLDivElement | null
   canvasRefForPointerCapture: React.MutableRefObject<HTMLCanvasElement | null>
 
@@ -179,23 +179,7 @@ export default function CanvasCell(props: CanvasCellProps) {
     onToggleCollapse,
   } = props
 
-  // 统一坐标换算：client -> canvas screen(px)（考虑 wrap.scroll + workspace/canvasRect）
-  const getScreenFromWrap = (clientX: number, clientY: number): { x: number; y: number } | null => {
-    const canvasEl = canvasRefForPointerCapture.current
-    const wrap = wrapEl
-    if (!canvasEl || !wrap) return null
-
-    const wrapRect = wrap.getBoundingClientRect()
-    const canvasRect = canvasEl.getBoundingClientRect()
-
-    const xCssInWorkspace = clientX - wrapRect.left + wrap.scrollLeft
-    const yCssInWorkspace = clientY - wrapRect.top + wrap.scrollTop
-
-    return {
-      x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
-      y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
-    }
-  }
+  // 旧的 getScreenFromWrap 已废弃：坐标入口迁移到 viewport-kit（screen=wrap 本地 CSS px）。
 
   // cell 当前中心点 world（用于中心缩放锚点）
   const cellCenterWorld = {
@@ -249,9 +233,14 @@ export default function CanvasCell(props: CanvasCellProps) {
           dragStartTimerRef.current = null
         }
 
-        const screen = getScreenFromWrap(ev.clientX, ev.clientY)
+        const screen = (() => {
+          const wrap = wrapEl
+          if (!wrap) return null
+          return clientToLocalCssPoint(wrap, ev.clientX, ev.clientY)
+        })()
         if (!screen) return
-        const world = screenToWorld(screen, camera)
+
+        const world = localCssToWorld(camera, screen)
 
         draggingCellPointerDown({ ev, cell: c, parentWorld, screen, world })
 

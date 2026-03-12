@@ -11,14 +11,14 @@
  */
 import React from 'react'
 import type { CellId, PortSide } from '../../cellTypes'
-import type { Camera } from '../utils/geometry'
-import { screenToWorld } from '../utils/geometry'
+import type { Camera2D } from 'viewport-kit'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
 
 export type CanvasCellPortsProps = {
   cellId: CellId
   cellSize: { w: number; h: number }
 
-  camera: Camera
+  camera: Camera2D
   canvasRefForPointerCapture: React.MutableRefObject<HTMLCanvasElement | null>
   /** 画布视口容器（用于正确的坐标换算） */
   wrapEl: HTMLDivElement | null
@@ -54,23 +54,6 @@ export default function CanvasCellPorts(props: CanvasCellPortsProps) {
     scheduleRender,
   } = props
 
-  const getScreenFromWrap = (clientX: number, clientY: number): { x: number; y: number } | null => {
-    const canvasEl = canvasRefForPointerCapture.current
-    const wrap = wrapEl
-    if (!canvasEl || !wrap) return null
-
-    const wrapRect = wrap.getBoundingClientRect()
-    const canvasRect = canvasEl.getBoundingClientRect()
-
-    const xCssInWorkspace = clientX - wrapRect.left + wrap.scrollLeft
-    const yCssInWorkspace = clientY - wrapRect.top + wrap.scrollTop
-
-    return {
-      x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
-      y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
-    }
-  }
-
   const ports: Array<{ port: PortSide; x: number; y: number }> = [
     { port: 'n', x: cellSize.w / 2, y: 8 },
     { port: 'e', x: cellSize.w - 8, y: cellSize.h / 2 },
@@ -96,9 +79,11 @@ export default function CanvasCellPorts(props: CanvasCellPortsProps) {
 
               canvasEl.setPointerCapture(ev.pointerId)
 
-              const screen = getScreenFromWrap(ev.clientX, ev.clientY)
-              if (!screen) return
-              const world = screenToWorld(screen, camera)
+              const wrap = wrapEl
+              if (!wrap) return
+              const screen = clientToLocalCssPoint(wrap, ev.clientX, ev.clientY)
+
+              const world = localCssToWorld(camera, screen)
 
               draggingEdgeRef.current = {
                 pointerId: ev.pointerId,

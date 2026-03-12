@@ -14,7 +14,7 @@ import type React from 'react'
 import type { CanvasEdge, CellId, CellNode, PortSide } from '../cellTypes'
 import { collectCellWorldHits, findCellById } from './domain/cellTree'
 import type { Camera2D } from 'viewport-kit'
-import { worldToLocalCss } from './utils/viewportCoords'
+import { worldToLocalCss } from 'viewport-kit'
 
 export type EdgeLayerProps = {
   edges: CanvasEdge[]
