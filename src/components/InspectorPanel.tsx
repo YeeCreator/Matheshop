@@ -1,5 +1,16 @@
 import type { Token } from './symbolicTypes'
 import type { InlineSelection } from './canvas/exprSelection'
+import type { ChangeEvent } from 'react'
+import {
+  Button,
+  ErrorText,
+  FieldLabel,
+  InfoRow,
+  MutedText,
+  Row,
+  Stack,
+  TextArea,
+} from 'main-ui-react'
 
 export type InspectorPanelProps = {
   active: {
@@ -18,69 +29,49 @@ export default function InspectorPanel(props: InspectorPanelProps) {
   const { active, tokens, onChangeDraft, onApply, onCancel } = props
 
   if (!active) {
-    return (
-      <div className="panel">
-        <h3>Inspector</h3>
-        <div className="small-muted">未选中表达式节点。点击单元内的 token 以进入局部编辑。</div>
-      </div>
-    )
+    return <MutedText>未选中表达式节点。点击单元内的 token 以进入局部编辑。</MutedText>
   }
 
   const { cellId, selection, draft, parseError } = active
 
   return (
-    <div className="panel">
-      <h3>Inspector</h3>
-
-      <div className="inspector-row">
-        <div className="inspector-k">Cell</div>
-        <div className="inspector-v">{cellId}</div>
-      </div>
-
-      <div className="inspector-row">
-        <div className="inspector-k">Selection</div>
-        <div className="inspector-v">
-          {selection.kind === 'tokenRange' ? `token[${selection.start}..${selection.end}]` : selection.kind}
-        </div>
-      </div>
+    <Stack gap={10}>
+      <InfoRow label="Cell" value={cellId} />
+      <InfoRow
+        label="Selection"
+        value={selection.kind === 'tokenRange' ? `token[${selection.start}..${selection.end}]` : selection.kind}
+      />
 
       {parseError && (
-        <div className="inspector-error">
+        <ErrorText>
           解析错误：{parseError}
-        </div>
+        </ErrorText>
       )}
 
-      <label className="inspector-label">
-        局部编辑
-        <textarea
-          className="inspector-textarea"
+      <FieldLabel label="局部编辑">
+        <TextArea
           value={draft}
-          onChange={(e) => onChangeDraft(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onChangeDraft(e.target.value)}
           rows={3}
         />
-      </label>
+      </FieldLabel>
 
-      <div className="inspector-actions">
-        <button type="button" onClick={onApply}>
-          应用
-        </button>
-        <button type="button" onClick={onCancel}>
-          取消
-        </button>
-      </div>
+      <Row gap={8}>
+        <Button onClick={onApply}>应用</Button>
+        <Button variant="ghost" onClick={onCancel}>取消</Button>
+      </Row>
 
       <details style={{ marginTop: 10 }}>
         <summary>Tokens（调试）</summary>
-        <div className="inspector-tokens">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
           {tokens ? tokens.map((t, i) => (
-            <div key={`${t.nodeId}:${i}`} className="inspector-token">
-              <span className="inspector-token-i">{i}</span>
+            <div key={`${t.nodeId}:${i}`} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ opacity: 0.6, fontSize: 12 }}>{i}</span>
               <span className={`expr-token expr-token--${t.kind}`}>{t.text || '␀'}</span>
             </div>
-          )) : <div className="small-muted">无 token</div>}
+          )) : <MutedText>无 token</MutedText>}
         </div>
       </details>
-    </div>
+    </Stack>
   )
 }
-

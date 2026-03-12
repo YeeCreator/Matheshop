@@ -7,18 +7,16 @@
  * - 将选择、编辑、hover port、连线模式、拖拽边、缩放等交互状态集中下发给 `CanvasCell`。
  *
  * 坐标系统说明：
- * - worldToScreen 使用 canvas 像素坐标；
- * - 本层将 canvas 像素进一步换算为 workspace 内 CSS 像素，并扣除 wrap 的 scroll 偏移，
- *   从而得到“视口内”的定位（用于绝对定位 DOM cell）。
+ * - 本层统一使用 viewport-kit 语义：world -> wrap 本地 CSS 坐标。
  */
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
-import type { Camera } from '../utils/geometry'
-import { worldToScreen } from '../utils/geometry'
 import { updateCellById } from '../domain/cellTree'
 import type { InlineSelection } from '../exprSelection'
 import CanvasCell from './CanvasCell'
 import { getCellRenderModel } from './getCellRenderModel'
+import type { Camera2D } from 'viewport-kit'
+import { worldToLocalCssWithScroll } from 'viewport-kit'
 
 export type DraggingEdgeState =
   | null
@@ -43,8 +41,8 @@ export type ResizingCellState =
 
 export type CanvasCellLayerProps = {
   cells: CellNode[]
-  camera: Camera
-  canvasEl: HTMLCanvasElement | null
+  camera: Camera2D
+
   wrapEl: HTMLDivElement | null
   renderTick: number
 
@@ -130,7 +128,6 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
   const {
     cells,
     camera,
-    canvasEl,
     wrapEl,
     renderTick,
     selectedCellId,
@@ -162,20 +159,11 @@ export default function CanvasCellLayer(props: CanvasCellLayerProps) {
   } = props
 
   const content = (() => {
-    if (!canvasEl || !wrapEl) return null
-
-    const canvasRect = canvasEl.getBoundingClientRect()
+    if (!wrapEl) return null
 
     const worldToCss = (world: { x: number; y: number }) => {
-      const screenPx = worldToScreen(world, camera)
-      const xCssInWorkspace = (screenPx.x / canvasEl.width) * canvasRect.width
-      const yCssInWorkspace = (screenPx.y / canvasEl.height) * canvasRect.height
-
-      // cell-layer 渲染在 workspace 内（且 wrap 可滚动），这里把 workspace 坐标转换为视口内坐标
-      return {
-        left: xCssInWorkspace - wrapEl.scrollLeft,
-        top: yCssInWorkspace - wrapEl.scrollTop,
-      }
+      const local = worldToLocalCssWithScroll(wrapEl, camera, world)
+      return { left: local.x, top: local.y }
     }
 
     const renderCell = (c: CellNode, depth: number, parentWorld: { x: number; y: number }) => {

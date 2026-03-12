@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../viewport-kit-react"
+		},
+		{
+			"path": "../main-ui-react"
 		}
 	],
 	"settings": {}

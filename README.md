@@ -6,7 +6,7 @@
 
 ## 功能概览
 
-- **画布相机（Camera）**：滚轮缩放、平移（采用 camera 变换的“虚拟平移”，**不是**通过滚动条 scroll 来平移画布）
+- **画布相机（Camera）**：滚轮缩放、平移（当前由通用工具包 `viewport-kit` 提供相机模型与 wheel/pinch 交互；画布网格属于世界空间的一部分，会随相机平移/缩放变换）
 - **单元框（Cell）**
   - 单击选中、拖拽移动
   - 双击进入编辑（文本域）
@@ -30,6 +30,7 @@
 
 - 滚轮：缩放（范围：最小 **8%** ~ 最大 **6400%**）
   - 说明：在多数浏览器里 Ctrl/⌘ + 滚轮默认会触发“页面缩放”。本项目会拦截该默认行为，统一作为“画布缩放”，避免整个主界面像网页一样被缩放。
+- 普通滚轮：平移（触控板双指/滚轮默认解释为平移）
 - Shift + 滚轮：横向平移
 - 中键拖拽：平移
 - 空格按住 + 左键拖拽：平移
@@ -94,37 +95,23 @@ Canvas 拆分目录：`src/components/canvas/`
 
 ## 常见问题（FAQ）
 
-### 1. Windows 下命令行怎么跑？
-本文档给的命令均为 PowerShell 版本（使用 `;` 串联命令）。
+### 0. 视口系统迁移说明
 
-### 2. 为什么用 `pnpm`？
-项目当前使用 `pnpm-lock.yaml`，建议统一用 `pnpm` 以避免锁文件漂移。
+当前 Matheshop 的“相机平移/缩放/捏合”等视口操作由通用工具包 `viewport-kit` 提供：
 
-### 3. KaTeX 字体/样式在哪里？
-KaTeX 相关资源由构建产物打包输出（可在 `dist/assets/` 看到字体文件）。
+- 滚轮平移、Ctrl/⌘+滚轮缩放、触摸捏合缩放：由 `viewport-kit` 统一处理
+- 拖拽平移：由 `viewport-kit` 统一实现相机更新，Matheshop 仅提供“何时允许平移”的业务条件（中键拖拽 / 空格按住+左键拖拽）
 
-## License
+> 备注：网格仍然是世界空间（world space）的一部分，由 Matheshop 在 world 坐标中绘制；`viewport-kit` 只负责相机与 world↔screen 换算。
 
-暂未声明（如需开源许可证，可补充 MIT/Apache-2.0 等）。
+### 4. 安装依赖时为什么出现 `deprecated subdependencies` 警告？
 
-## Desktop App（Electron）
+`pnpm` 的这类输出表示：你当前依赖树里有一些**间接依赖**（subdependencies）使用了已被上游标记为“deprecated”的旧版本。
 
-本项目可以同时以 **Web** 和 **桌面 App（macOS/Windows/Linux）** 形式运行。桌面端使用 Electron，开发时直接加载 Vite dev server，达到接近“热更新”的体验。
+- 这通常**不会影响运行**，也不等同于安全漏洞
+- 处理方式一般是：升级直接依赖（例如 Electron / 构建工具链）后，间接依赖会随之更新
 
-### 开发（桌面端）
+如果你希望进一步排查来源，可以使用 `pnpm why <包名>` 查看是哪个上游把它带进来的。
 
-```powershell
-pnpm install
-pnpm desktop:dev
-```
 
-- 会同时启动 Vite（默认 http://localhost:5173）与 Electron。
-- 修改前端代码后，Vite 会热更新；Electron 窗口会自动刷新/更新（因为它加载的就是 Vite dev server）。
-
-### 打包（桌面端）
-
-```powershell
-pnpm desktop:dist
-```
-
-产物输出到：`dist-desktop/`
+````

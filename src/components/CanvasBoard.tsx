@@ -27,10 +27,20 @@ import {
 } from './canvas/domain/cellTree'
 import {
   clamp,
-  type Camera,
   resizeCanvasToDisplaySize,
-  screenToWorld,
 } from './canvas/utils/geometry'
+// 新增：viewport-kit 相机交互（作为唯一的 camera 状态来源）
+import {
+  useViewportCamera,
+  applyCameraToCanvas2D,
+  getVisibleWorldBox,
+  type LegacyCamera,
+  camera2DToLegacy,
+  getDprScaleFromCanvas,
+  legacyToCamera2D,
+  clientToLocalCssPoint,
+  localCssToWorld,
+} from 'viewport-kit'
 import { parseBlocksFromText } from './canvas/utils/blocks'
 
 import type { InlineSelection } from './canvas/exprSelection'
@@ -52,7 +62,7 @@ export type CanvasBoardProps = {
   requestClearToken: number
 }
 
-type Stroke = {
+interface Stroke {
   id: string
   tool: 'brush' | 'eraser'
   color: string
@@ -93,7 +103,59 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const redoRef = useRef<Stroke[]>([])
   const backgroundRef = useRef<string>('#ffffff')
 
-  const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 })
+  // 旧 camera 仍保留（下游 layer 目前依赖它），但其值将由 viewport-kit camera2d 派生。
+  const cameraRef = useRef<LegacyCamera>({ x: 0, y: 0, zoom: 1 })
+
+  // 记录最近一次鼠标位置（容器本地 CSS 像素），用于某些设备上 ctrl+wheel 的锚点推断。
+  const lastCursorLocalRef = useRef<{ x: number; y: number } | null>(null)
+
+  // viewport-kit camera（权威相机）
+  const viewport = useViewportCamera({
+    containerRef: wrapRef,
+    // matheshop 没有固定世界边界，fit 行为只用于初始化 scale；这里给一个足够大的 viewBox。
+    viewBox: { x: -5000, y: -5000, width: 10000, height: 10000 },
+    paddingPx: 0,
+    minScaleFactor: 0.08,
+    maxScaleFactor: 64,
+    wheelZoomSpeed: 0.0028,
+    wheelPanSpeed: 1.0,
+    getCursorLocal: () => lastCursorLocalRef.current,
+    interactionMode: {
+      // 与现有交互一致：
+      // - 普通 wheel：平移
+      // - ctrl/meta + wheel：缩放（锚点在光标处）
+      // - 拖拽平移：仍由原有中键/空格逻辑负责（避免和 cell 左键拖拽冲突）
+      dragPan: true,
+      // 仅在中键拖拽或“空格按住 + 左键拖拽”时允许视口平移。
+      // 这样不会抢占 cell 的普通左键拖拽/框选。
+      dragPanCondition: (e: unknown) => {
+        // buttons 位：4=中键按下（pointer move 时也适用）
+        // 注意：这里的 e 是 viewport-kit 抽象事件，Matheshop 会在转换时带上 buttons。
+        const anyE = e as unknown as { buttons?: number; button?: number }
+        const isMiddleByButtons = typeof anyE.buttons === 'number' ? (anyE.buttons & 4) === 4 : false
+        const isLeft = typeof anyE.button === 'number' ? anyE.button === 0 : true
+        return isMiddleByButtons || (isSpaceDown && isLeft)
+      },
+      wheelPan: true,
+      ctrlWheelZoom: true,
+      pinchZoom: true,
+      wheelZoomAnchor: 'cursor',
+    },
+  })
+
+  const { camera: camera2d, setCamera: setCamera2d, handlers: viewportHandlers } = viewport
+
+  // 相机同步：camera2d -> legacy cameraRef（供旧逻辑使用）
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const dprScale = getDprScaleFromCanvas(canvas)
+    cameraRef.current = camera2DToLegacy(camera2d, { dprScale })
+    // 注意：这里不直接 scheduleRender，因为 setCamera2d 已经会触发组件重渲染；
+    // 但 CanvasBoard 渲染主循环是手动调度，所以仍需要触发。
+    scheduleRender()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera2d.pan.x, camera2d.pan.y, camera2d.scale])
 
   const [formulas, setFormulas] = useState<FormulaItem[]>([])
 
@@ -126,11 +188,13 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const dragStartTimerRef = useRef<number | null>(null)
 
   // --- 交互状态（refs/state）---
-  const viewportPanRef = useRef<null | {
-  pointerId: number
-  startScreen: { x: number; y: number }
-  startCam: { x: number; y: number; zoom: number }
-  }>(null)
+  // viewportPanRef：旧的 legacy 平移逻辑已迁移到 viewport-kit（见 viewportHandlers + dragPanCondition）。
+  // 为避免回归，这里保留类型占位但不再使用。
+  // const viewportPanRef = useRef<null | {
+  // pointerId: number
+  // startScreen: { x: number; y: number }
+  // startCam: { x: number; y: number; zoom: number }
+  // }>(null)
 
   const cellDragRef = useRef<null | {
   pointerId: number
@@ -321,7 +385,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
   const render = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    const wrap = wrapRef.current
+    if (!canvas || !wrap) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -333,24 +398,42 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
 
-    const cam = cameraRef.current
+    /**
+     * 网格属于世界空间（world space）的一部分：
+     * - 它不是贴在屏幕/镜头上的 UI；
+     * - 它应与 cell/edge/formula 使用同一套 world 坐标系；
+     * - 相机移动时，网格应与世界内容一起发生变换（看起来“反方向滑动”）。
+     *
+     * 因此这里做的是：
+     * 1) 将 ctx 先映射到“workspace 的 CSS px”域（处理 HiDPI）；
+     * 2) 再应用 viewport-kit 的 camera2d 变换（world -> screen(CSS px)）。
+     */
 
-    // 可选网格
+    // canvas.width/height 是像素缓冲区，canvasRect 是 workspace 的 CSS 尺寸。
+    // 我们先把绘制空间缩放回 CSS px，避免 DPR 导致网格变换倍率错误。
+    const dprScale = getDprScaleFromCanvas(canvas)
+    ctx.save()
+    ctx.scale(dprScale, dprScale)
+
+    // 可选网格（world 空间中每 100 单位一格）
     const gridSize = 100
-    const gridPx = gridSize * cam.zoom
+    const gridPx = gridSize * camera2d.scale
     if (gridPx >= 20) {
-      ctx.save()
-      ctx.setTransform(cam.zoom, 0, 0, cam.zoom, -cam.x * cam.zoom, -cam.y * cam.zoom)
-      ctx.lineWidth = 1 / cam.zoom
+      // 将相机变换应用到 ctx（在 CSS px 域）
+      applyCameraToCanvas2D(ctx, camera2d)
+      ctx.lineWidth = 1 / camera2d.scale
       ctx.strokeStyle = 'rgba(0,0,0,0.06)'
 
-      const viewWorldTopLeft = screenToWorld({ x: 0, y: 0 }, cam)
-      const viewWorldBottomRight = screenToWorld({ x: canvas.width, y: canvas.height }, cam)
+      // 重要：网格绘制只需要覆盖“当前可视口”，因此这里应使用 wrap 的可视尺寸。
+      // 之前误用 canvas/workspace 尺寸会让网格锚定范围与实际视口脱节，空白画布时容易出现
+      // “相机在动但网格看起来不动”的错觉。
+      const wrapRect = wrap.getBoundingClientRect()
+      const view = getVisibleWorldBox(camera2d, { width: wrapRect.width, height: wrapRect.height })
 
-      const startX = Math.floor(viewWorldTopLeft.x / gridSize) * gridSize
-      const endX = Math.ceil(viewWorldBottomRight.x / gridSize) * gridSize
-      const startY = Math.floor(viewWorldTopLeft.y / gridSize) * gridSize
-      const endY = Math.ceil(viewWorldBottomRight.y / gridSize) * gridSize
+      const startX = Math.floor(view.x / gridSize) * gridSize
+      const endX = Math.ceil((view.x + view.width) / gridSize) * gridSize
+      const startY = Math.floor(view.y / gridSize) * gridSize
+      const endY = Math.ceil((view.y + view.height) / gridSize) * gridSize
 
       ctx.beginPath()
       for (let x = startX; x <= endX; x += gridSize) {
@@ -362,11 +445,12 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         ctx.lineTo(endX, y)
       }
       ctx.stroke()
-      ctx.restore()
     }
 
+    ctx.restore()
+
     bumpRenderTick()
-  }, [bumpRenderTick])
+  }, [bumpRenderTick, camera2d])
 
   // init + resize observer
   useEffect(() => {
@@ -587,31 +671,15 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const isBoxSelectingRef = useRef(false)
 
   // 基于可滚动容器（canvas-wrap）计算“画布像素坐标”。
-  // 注意：canvas 的 CSS 宽高通常等于 workspace(8000x8000)；wrap 只是“窗口”。
-  // 因此映射必须以 canvas 的 bounding box 为基准，并叠加 wrap 的 scrollLeft/Top，
-  // 不能用 wrapRect.width/height 直接映射，否则坐标会被压缩到左上角。
-  const getScreenFromWrap = useCallback(
-    (clientX: number, clientY: number): { x: number; y: number } | null => {
-      const canvas = canvasRef.current
-      const wrap = wrapRef.current
-      if (!canvas || !wrap) return null
+  // 注意：这套 client->workspaceCSS->canvasPx 的旧链路已迁移到 viewport-kit 语义（screen=wrap 本地 CSS px）。
+  // 旧实现 getScreenFromWrap 已删除，避免后续继续误用。
 
-      const wrapRect = wrap.getBoundingClientRect()
-      const canvasRect = canvas.getBoundingClientRect()
-
-      // 把 client 坐标先换算到“workspace 内的 CSS 坐标”（考虑 wrap 滚动）
-      const xCssInWorkspace = clientX - wrapRect.left + wrap.scrollLeft
-      const yCssInWorkspace = clientY - wrapRect.top + wrap.scrollTop
-
-      // 然后把 workspace CSS 坐标映射到 canvas 像素坐标（考虑 DPR）
-      // canvasRect.width/height == canvas 的 CSS 尺寸
-      const sx = (xCssInWorkspace / canvasRect.width) * canvas.width
-      const sy = (yCssInWorkspace / canvasRect.height) * canvas.height
-
-      return { x: sx, y: sy }
-    },
-    [],
-  )
+  // 新的坐标入口：client -> 屏幕空间（wrap 容器本地 CSS px）
+  const getLocalCssFromClient = useCallback((clientX: number, clientY: number) => {
+    const wrap = wrapRef.current
+    if (!wrap) return null
+    return clientToLocalCssPoint(wrap, clientX, clientY)
+  }, [])
 
   // 框选：screen 坐标转 world 矩形
   const screenBoxToWorldBox = useCallback(
@@ -621,8 +689,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       const x2 = Math.max(a.x, b.x)
       const y2 = Math.max(a.y, b.y)
 
-      const w1 = screenToWorld({ x: x1, y: y1 }, cameraRef.current)
-      const w2 = screenToWorld({ x: x2, y: y2 }, cameraRef.current)
+      const w1 = localCssToWorld(camera2d, { x: x1, y: y1 })
+      const w2 = localCssToWorld(camera2d, { x: x2, y: y2 })
 
       return {
         x: Math.min(w1.x, w2.x),
@@ -631,7 +699,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
         h: Math.abs(w2.y - w1.y),
       }
     },
-    [],
+    [camera2d],
   )
 
   const cellIntersectsBox = useCallback(
@@ -690,6 +758,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const canvas = canvasRef.current
     if (!canvas) return
 
+    // 记录光标位置（用于 ctrl+wheel 锚点）
+    lastCursorLocalRef.current = getLocalFromWrap(e.clientX, e.clientY)
+
     if (editingCellId && e.button === 0) {
       commitCellEditing(editingCellId)
     }
@@ -712,21 +783,19 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const isMiddle = e.button === 1
     const isMiddleByButtons = (e.buttons & 4) === 4
 
-    // 中键 或 空格+左键：视口平移
+    // 中键 或 空格+左键：视口平移（交给 viewport-kit）
     if (isMiddle || isMiddleByButtons || (isSpaceDown && e.button === 0)) {
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
-      if (!screen) return
-      viewportPanRef.current = {
+      viewportHandlers.onPointerDown({
         pointerId: e.pointerId,
-        startScreen: screen,
-        startCam: { ...cameraRef.current },
-      }
-
-      try {
-        canvas.setPointerCapture(e.pointerId)
-      } catch {
-        // ignore
-      }
+        clientX: e.clientX,
+        clientY: e.clientY,
+        preventDefault: () => e.preventDefault(),
+        currentTarget: e.currentTarget,
+        // 额外字段：给 dragPanCondition 识别
+        buttons: e.buttons,
+        button: e.button,
+      } as unknown as Parameters<typeof viewportHandlers.onPointerDown>[0])
+      scheduleRender()
       return
     }
 
@@ -740,7 +809,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
     // 框选：空白处左键按下且无 modifier
     if (e.button === 0 && !isSpaceDown && !isLinkMode && !draggingFormulaRef.current) {
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      const screen = getLocalCssFromClient(e.clientX, e.clientY)
       if (!screen) return
       isBoxSelectingRef.current = true
       setSelectionBox({ start: screen, end: screen })
@@ -761,7 +830,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 双击创建节点：避免在连线/平移/拖拽/框选等状态下误触
     // handleDoubleClick：不依赖任何外部状态机，按当前 refs/state 判定是否允许创建
     if (isLinkMode) return
-    if (isSpaceDown || viewportPanRef.current) return
+    if (isSpaceDown) return
     if (draggingFormulaRef.current) return
     if (cellDragRef.current || resizeRef.current) return
     if (isBoxSelectingRef.current) return
@@ -769,9 +838,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 只响应左键双击
     if ((e as unknown as MouseEvent).button !== 0) return
 
-    const screen = getScreenFromWrap(e.clientX, e.clientY)
+    const screen = getLocalCssFromClient(e.clientX, e.clientY)
     if (!screen) return
-    const world = screenToWorld(screen, cameraRef.current)
+    const world = localCssToWorld(camera2d, screen)
 
     const id = crypto.randomUUID()
     const seq = nextCellSeqRef.current++
@@ -815,15 +884,34 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   }
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    lastCursorLocalRef.current = getLocalFromWrap(e.clientX, e.clientY)
+
     const canvas = canvasRef.current
     if (!canvas) return
+
+    // 如果当前是 viewport-kit 的拖拽平移状态，让它优先处理并返回。
+    // 说明：viewport-kit 内部通过 pointer capture + pointers map 维持状态。
+    const isMiddleByButtons = (e.buttons & 4) === 4
+    if (isMiddleByButtons || (isSpaceDown && (e.buttons & 1) === 1)) {
+      viewportHandlers.onPointerMove({
+        pointerId: e.pointerId,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        preventDefault: () => e.preventDefault(),
+        currentTarget: e.currentTarget,
+        buttons: e.buttons,
+        button: e.button,
+      } as unknown as Parameters<typeof viewportHandlers.onPointerMove>[0])
+      scheduleRender()
+      return
+    }
 
     // 节点缩放：本地 resizeRef
     if (resizeRef.current && resizeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      const screen = getLocalCssFromClient(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
+      const world = localCssToWorld(camera2d, screen)
 
       const r = resizeRef.current
 
@@ -863,7 +951,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 框选中：更新 selectionBox
     if (isBoxSelectingRef.current && selectionBox) {
       e.preventDefault()
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      const screen = getLocalCssFromClient(e.clientX, e.clientY)
       if (!screen) return
       setSelectionBox({ start: selectionBox.start, end: screen })
       scheduleRender()
@@ -873,9 +961,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 拖拽连线：保持 draggingEdgeRef 流程（无状态机同步）
     if (draggingEdgeRef.current && draggingEdgeRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      const screen = getLocalCssFromClient(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
+      const world = localCssToWorld(camera2d, screen)
       draggingEdgeRef.current.pointerWorld = world
 
       const hover = pickNearestPort(world)
@@ -902,10 +990,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 拖拽单元框：本地 cellDragRef
     if (cellDragRef.current && cellDragRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      const screen = getLocalCssFromClient(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
-
+      const world = localCssToWorld(camera2d, screen)
       const d = cellDragRef.current
       const dx = screen.x - d.startScreen.x
       const dy = screen.y - d.startScreen.y
@@ -942,9 +1029,9 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     // 拖拽公式：保持原逻辑
     if (draggingFormulaRef.current && draggingFormulaRef.current.pointerId === e.pointerId) {
       e.preventDefault()
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
+      const screen = getLocalCssFromClient(e.clientX, e.clientY)
       if (!screen) return
-      const world = screenToWorld(screen, cameraRef.current)
+      const world = localCssToWorld(camera2d, screen)
       const d = draggingFormulaRef.current
       const dx = world.x - d.startWorld.x
       const dy = world.y - d.startWorld.y
@@ -957,30 +1044,27 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
 
     // 视口平移：本地 viewportPanRef
-    if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) {
-      e.preventDefault()
-      const screen = getScreenFromWrap(e.clientX, e.clientY)
-      if (!screen) return
+    // 已迁移到 viewport-kit（见上面的 viewportHandlers.onPointerMove），此分支不再需要。
+    // if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) { ... }
 
-      const p = viewportPanRef.current
-      const dxScreen = screen.x - p.startScreen.x
-      const dyScreen = screen.y - p.startScreen.y
-
-      cameraRef.current = {
-        x: p.startCam.x - dxScreen / p.startCam.zoom,
-        y: p.startCam.y - dyScreen / p.startCam.zoom,
-        zoom: p.startCam.zoom,
-      }
-
-      scheduleRender()
-      return
-    }
-    }
+    // ...existing code...
+  }
 
   const handlePointerUpOrCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     e.preventDefault()
+
+    // 先尝试交给 viewport-kit 结束（如果该 pointerId 属于它的 capture）
+    viewportHandlers.onPointerUp({
+      pointerId: e.pointerId,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      preventDefault: () => e.preventDefault(),
+      currentTarget: e.currentTarget,
+      buttons: (e as unknown as { buttons?: number }).buttons ?? 0,
+      button: e.button,
+    } as unknown as Parameters<typeof viewportHandlers.onPointerUp>[0])
 
     // 框选结束
     if (isBoxSelectingRef.current && selectionBox) {
@@ -1072,63 +1156,66 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
 
     // 结束视口平移
-    if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) {
-      try {
-        canvas.releasePointerCapture(e.pointerId)
-      } catch {
-        // ignore
-      }
-      viewportPanRef.current = null
-      scheduleRender()
-      return
-    }
-    }
+    // 已迁移到 viewport-kit（见上面的 viewportHandlers.onPointerUp），此分支不再需要。
+    // if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) { ... }
 
-  // wheel：直接本地更新 camera
+    // ...existing code...
+  }
+
+  // 新增：把 client 坐标转换为容器本地 CSS 像素（用于 viewport-kit）
+  const getLocalFromWrap = useCallback(
+    (clientX: number, clientY: number) => {
+      const wrap = wrapRef.current
+      if (!wrap) return null
+      const rect = wrap.getBoundingClientRect()
+      return { x: clientX - rect.left, y: clientY - rect.top }
+    },
+    [],
+  )
+
+  // wheel：改为交给 viewport-kit 处理；同时保持 shift+wheel 横向平移的旧体验。
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
 
     const onWheel = (ev: WheelEvent) => {
+      // 总是拦截，避免浏览器页面缩放/回弹等默认行为。
       ev.preventDefault()
 
-      const screen = getScreenFromWrap(ev.clientX, ev.clientY)
-      if (!screen) return
+      const local = getLocalFromWrap(ev.clientX, ev.clientY)
+      if (local) lastCursorLocalRef.current = local
 
-      const cam = cameraRef.current
       const isZoomGesture = ev.ctrlKey || ev.metaKey
-
       if (ev.shiftKey && !isZoomGesture) {
-        cameraRef.current = { ...cam, x: cam.x + ev.deltaY / cam.zoom }
-        scheduleRender()
+        // 与旧逻辑一致：shift+wheel 主要用于横向平移。
+        // viewport-kit 的 wheelPan 是按 deltaX/deltaY 平移，这里把 deltaY 映射到 deltaX。
+        const canvas = canvasRef.current
+        if (canvas) {
+          const dprScale = getDprScaleFromCanvas(canvas)
+          const legacy = cameraRef.current
+          const nextLegacy: LegacyCamera = { ...legacy, x: legacy.x + ev.deltaY / legacy.zoom }
+          setCamera2d(legacyToCamera2D(nextLegacy, { dprScale }))
+        }
         return
       }
 
-      if (!isZoomGesture) {
-        cameraRef.current = { ...cam, x: cam.x + ev.deltaX / cam.zoom, y: cam.y + ev.deltaY / cam.zoom }
-        scheduleRender()
-        return
-      }
-
-      const zoomIntensity = 0.0028
-      const factor = Math.exp(-ev.deltaY * zoomIntensity)
-      const nextZoom = Math.min(64, Math.max(0.08, cam.zoom * factor))
-
-      cameraRef.current = {
-        zoom: nextZoom,
-        x: (cam.x + screen.x / cam.zoom) - screen.x / nextZoom,
-        y: (cam.y + screen.y / cam.zoom) - screen.y / nextZoom,
-      }
-
+      viewportHandlers.onWheel({
+        ctrlKey: ev.ctrlKey,
+        deltaX: ev.deltaX,
+        deltaY: ev.deltaY,
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        preventDefault: () => ev.preventDefault(),
+      })
       scheduleRender()
     }
 
     wrap.addEventListener('wheel', onWheel, { passive: false })
     return () => wrap.removeEventListener('wheel', onWheel)
-    }, [getScreenFromWrap, scheduleRender])
+  }, [getLocalFromWrap, setCamera2d, viewportHandlers, scheduleRender])
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    // 由原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
+    // 由 wrap 的原生 wheel 监听器统一处理（解决 passive/浏览器缩放问题）
     e.preventDefault()
   }
 
@@ -1220,7 +1307,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
             selectedEdgeId={selectedEdgeId}
             draggingEdge={draggingEdgeRef.current}
             cells={cells}
-            camera={cameraRef.current}
+            camera={camera2d}
             canvasEl={canvasRef.current}
             wrapEl={wrapRef.current}
             getPortWorld={getPortWorld}
@@ -1236,8 +1323,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
 
           <CanvasCellLayer
             cells={cells}
-            camera={cameraRef.current}
-            canvasEl={canvasRef.current}
+            camera={camera2d}
             wrapEl={wrapRef.current}
             renderTick={renderTick}
             selectedCellId={selectedCellId}
@@ -1300,7 +1386,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           <FormulaLayer
             formulas={formulas}
             selectedFormulaId={selectedFormulaId}
-            camera={cameraRef.current}
+            camera={camera2d}
             canvasEl={canvasRef.current}
             wrapEl={wrapRef.current}
             onSelectFormula={(id) => setSelectedFormulaId(id)}
@@ -1376,27 +1462,13 @@ export default function CanvasBoard(props: CanvasBoardProps) {
           )}
 
           {selectionBox && (() => {
-            const canvas = canvasRef.current
             const wrap = wrapRef.current
-            if (!canvas || !wrap) return null
+            if (!wrap) return null
 
-            const canvasRect = canvas.getBoundingClientRect()
-
-            // selectionBox 是 canvas 内像素坐标；需要映射到 workspace CSS 坐标。
-            // 注意：canvasRect 的 CSS 尺寸 ≈ workspace（8000x8000），wrapRect 只是视口。
-            // 因此必须用 canvasRect.width/height 来做像素->CSS 的比例换算。
-            const pxToCssX = canvasRect.width / canvas.width
-            const pxToCssY = canvasRect.height / canvas.height
-
-            const leftCssInWorkspace = Math.min(selectionBox.start.x, selectionBox.end.x) * pxToCssX
-            const topCssInWorkspace = Math.min(selectionBox.start.y, selectionBox.end.y) * pxToCssY
-            const widthCss = Math.abs(selectionBox.start.x - selectionBox.end.x) * pxToCssX
-            const heightCss = Math.abs(selectionBox.start.y - selectionBox.end.y) * pxToCssY
-
-            // overlay 是放在 canvas-workspace（position:relative）里。
-            // 需要把 workspace CSS 坐标减去当前滚动量，变成“视口内的绝对定位”。
-            const left = leftCssInWorkspace - wrap.scrollLeft
-            const top = topCssInWorkspace - wrap.scrollTop
+            const left = Math.min(selectionBox.start.x, selectionBox.end.x)
+            const top = Math.min(selectionBox.start.y, selectionBox.end.y)
+            const width = Math.abs(selectionBox.start.x - selectionBox.end.x)
+            const height = Math.abs(selectionBox.start.y - selectionBox.end.y)
 
             return (
               <div
@@ -1405,8 +1477,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
                   position: 'absolute',
                   left,
                   top,
-                  width: widthCss,
-                  height: heightCss,
+                  width,
+                  height,
                   background: 'rgba(0,120,255,0.12)',
                   border: '1.5px solid #1890ff',
                   pointerEvents: 'none',

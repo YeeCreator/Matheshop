@@ -9,11 +9,12 @@
  *   - 左键开始拖拽，capture pointer，并向上层回传拖拽起点（startWorld + startFormula）。
  *
  * 坐标换算：
- * client(浏览器) -> screen(px, canvas 像素) -> world(画布逻辑坐标)。
+ * client(浏览器) -> wrap 本地 CSS 坐标 -> world(画布逻辑坐标)。
  */
 import katex from 'katex'
 import type React from 'react'
-import { screenToWorld, type Camera, worldToScreen } from './utils/geometry'
+import type { Camera2D } from 'viewport-kit'
+import { clientToLocalCssPoint, localCssToWorld, worldToLocalCssWithScroll } from 'viewport-kit'
 
 type FormulaItem = {
   id: string
@@ -28,7 +29,7 @@ export type FormulaLayerProps = {
   formulas: FormulaItem[]
   selectedFormulaId: string | null
 
-  camera: Camera
+  camera: Camera2D
   canvasEl: HTMLCanvasElement | null
   wrapEl: HTMLDivElement | null
 
@@ -41,28 +42,9 @@ export default function FormulaLayer(props: FormulaLayerProps) {
 
   if (!canvasEl || !wrapEl) return null
 
-  const canvasRect = canvasEl.getBoundingClientRect()
-  const wrapRect = wrapEl.getBoundingClientRect()
-
-  const clientToScreenPx = (clientX: number, clientY: number) => {
-    const xCssInWorkspace = clientX - wrapRect.left + wrapEl.scrollLeft
-    const yCssInWorkspace = clientY - wrapRect.top + wrapEl.scrollTop
-
-    return {
-      x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
-      y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
-    }
-  }
-
   const worldToCss = (world: { x: number; y: number }) => {
-    const screenPx = worldToScreen(world, camera)
-    const xCssInWorkspace = (screenPx.x / canvasEl.width) * canvasRect.width
-    const yCssInWorkspace = (screenPx.y / canvasEl.height) * canvasRect.height
-
-    return {
-      left: xCssInWorkspace - wrapEl.scrollLeft,
-      top: yCssInWorkspace - wrapEl.scrollTop,
-    }
+    const local = worldToLocalCssWithScroll(wrapEl, camera, world)
+    return { left: local.x, top: local.y }
   }
 
   return (
@@ -100,8 +82,10 @@ export default function FormulaLayer(props: FormulaLayerProps) {
 
               canvasEl.setPointerCapture(ev.pointerId)
 
-              const screen = clientToScreenPx(ev.clientX, ev.clientY)
-              const world = screenToWorld(screen, camera)
+              const world = (() => {
+                const screen = clientToLocalCssPoint(wrapEl, ev.clientX, ev.clientY)
+                return localCssToWorld(camera, screen)
+              })()
 
               onStartDrag({
                 id: f.id,

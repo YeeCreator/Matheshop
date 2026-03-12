@@ -10,14 +10,14 @@
  */
 import React from 'react'
 import type { CellNode } from '../../cellTypes'
-import type { Camera } from '../utils/geometry'
-import { screenToWorld } from '../utils/geometry'
+import type { Camera2D } from 'viewport-kit'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
 
 export type CanvasCellResizeHandleProps = {
   cell: CellNode
   isVisible: boolean
 
-  camera: Camera
+  camera: Camera2D
   canvasRefForPointerCapture: React.MutableRefObject<HTMLCanvasElement | null>
 
   resizingCellRef: React.MutableRefObject<
@@ -65,18 +65,8 @@ export default function CanvasCellResizeHandle(props: CanvasCellResizeHandleProp
         const wrap = wrapEl
         if (!canvasEl || !wrap) return
 
-        const wrapRect = wrap.getBoundingClientRect()
-        const canvasRect = canvasEl.getBoundingClientRect()
-
-        const xCssInWorkspace = ev.clientX - wrapRect.left + wrap.scrollLeft
-        const yCssInWorkspace = ev.clientY - wrapRect.top + wrap.scrollTop
-
-        const screen = {
-          x: (xCssInWorkspace / canvasRect.width) * canvasEl.width,
-          y: (yCssInWorkspace / canvasRect.height) * canvasEl.height,
-        }
-
-        const world = screenToWorld(screen, camera)
+        const screen = clientToLocalCssPoint(wrap, ev.clientX, ev.clientY)
+        const world = localCssToWorld(camera, screen)
 
         const payload = {
           pointerId: ev.pointerId,
