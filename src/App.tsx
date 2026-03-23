@@ -24,7 +24,7 @@ import {
   ToolbarTitle,
   Toolbar,
   MatchFrame,
-} from 'main-ui-react'
+} from 'main-ui-react/layout'
 
 const TOOL_LABELS: Record<Tool, string> = {
   text: '文本/公式',
@@ -113,6 +113,7 @@ function App() {
 
   return (
     <MatchFrame
+      preset="vscodium"
       layout={{
         // 宿主（matheshop）本身已让 #root/body 100% 高度，这里保持 main-ui-react 默认的 viewport 高度策略
         heightMode: 'viewport',
@@ -120,27 +121,40 @@ function App() {
           width: 220,
           scroll: true,
           padding: 12,
-          background: 'rgba(255,255,255,0.92)',
+          background: '#252526',
           bordered: true,
         },
         rightSidebar: {
           width: 360,
           scroll: true,
           padding: 12,
-          background: 'rgba(255,255,255,0.92)',
+          background: '#252526',
           bordered: true,
         },
       }}
       toolbar={
         activeView === 'settings' ? null : (
           <Toolbar
+            preset="vscodium"
             left={
               <>
                 <ToolbarTitle>Matheshop</ToolbarTitle>
                 <ToolbarSeparator />
-                <Button onClick={() => setClearToken((x) => x + 1)}>清空</Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setClearToken((x) => x + 1)}
+                  style={{ color: '#d4d4d4', borderColor: '#3c3c3c', background: '#2d2d2d' }}
+                >
+                  清空
+                </Button>
                 <ToolbarLabel label="文本颜色">
-                  <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
+                  <input
+                    type="color"
+                    title="文本颜色"
+                    aria-label="文本颜色"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                  />
                 </ToolbarLabel>
               </>
             }
@@ -150,6 +164,7 @@ function App() {
                 aria-label="设置"
                 aria-expanded={false}
                 onClick={openSettings}
+                style={{ color: '#d4d4d4', borderColor: '#3c3c3c', background: '#2d2d2d' }}
               >
                 ⚙
               </IconButton>
@@ -159,10 +174,15 @@ function App() {
       }
       leftSidebar={
         activeView === 'settings' ? null : (
-          <Panel title="工具">
+          <Panel preset="vscodium" title="工具">
             <List>
               {toolItems.map((t) => (
-                <ListItem key={t} onClick={() => setTool(t)} selected={tool === t}>
+                <ListItem
+                  key={t}
+                  onClick={() => setTool(t)}
+                  selected={tool === t}
+                  style={{ background: tool === t ? 'rgba(14, 99, 156, 0.3)' : '#2d2d2d', color: '#d4d4d4', borderColor: '#3c3c3c' }}
+                >
                   {TOOL_LABELS[t]}
                 </ListItem>
               ))}
@@ -180,9 +200,9 @@ function App() {
           />
 
           {activeView === 'settings' ? null : (
-            <ContentShell>
+            <ContentShell style={{ background: '#1e1e1e', color: '#d4d4d4' }}>
               <Row wrap>
-                <MutedText>提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</MutedText>
+                <MutedText style={{ color: '#9da2a6' }}>提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</MutedText>
               </Row>
 
               <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
@@ -192,8 +212,8 @@ function App() {
       }
       rightSidebar={
         activeView === 'settings' ? null : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Panel title="Inspector">
+          <div className="math-right-sidebar-stack">
+            <Panel preset="vscodium" title="Inspector">
               <InspectorPanel
                 active={
                   inspector.activeInlineEditor
@@ -211,18 +231,19 @@ function App() {
               />
             </Panel>
 
-            <Panel title="图层">
+            <Panel preset="vscodium" title="图层">
               <List>
                 {layers.map((l) => (
-                  <ListItem key={l}>{l}</ListItem>
+                  <ListItem key={l} style={{ background: '#2d2d2d', color: '#d4d4d4', borderColor: '#3c3c3c' }}>{l}</ListItem>
                 ))}
               </List>
             </Panel>
 
-            <Panel title="历史记录">
+            <Panel preset="vscodium" title="历史记录">
               <TextArea
                 readOnly
                 monospace
+                style={{ background: '#1e1e1e', color: '#d4d4d4', borderColor: '#3c3c3c' }}
                 value={
                   history.length === 0
                     ? '暂无'

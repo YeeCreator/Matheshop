@@ -80,6 +80,12 @@
   resize: none;
 }
 
+.math-right-sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* LaTeX / 公式层 */
 .formula-layer {
   position: absolute;

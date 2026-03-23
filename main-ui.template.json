@@ -1,0 +1,37 @@
+{
+  "appId": "matheshop",
+  "template": "ide-workbench",
+  "deliveryModel": {
+    "shell": "managed",
+    "content": "detached"
+  },
+  "mainAreaMode": "split-tabs",
+  "allowSplit": true,
+  "allowTabs": true,
+  "docking": {
+    "persistLayout": true,
+    "layoutStorageKey": "main-ui-kit:dock-layout:v1:matheshop"
+  },
+  "defaultTabContent": "flow-canvas",
+  "enabledTabContents": [
+    "text-editor",
+    "viewport-2d",
+    "flow-canvas",
+    "custom"
+  ],
+  "elements": {
+    "menubar": true,
+    "toolbar": true,
+    "activitybar": true,
+    "leftSidebar": true,
+    "rightSidebar": true,
+    "bottomPanel": true,
+    "statusbar": true,
+    "settingsPage": true,
+    "keybindingsPage": true
+  },
+  "viewport": {
+    "engine2d": "custom",
+    "engine3d": "none"
+  }
+}
