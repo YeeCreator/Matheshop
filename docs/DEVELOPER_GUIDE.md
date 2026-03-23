@@ -38,6 +38,23 @@ pnpm lint
 
 > 约定：不要直接用 npm/yarn 改依赖，避免 `pnpm-lock.yaml` 漂移。
 
+## 1.1 壳层托管与内容剥离（2026-03-14）
+
+当前项目采用“壳层托管 + 内容剥离”结构：
+
+1. 托管壳层：`src/managed/**`
+  - 当前入口：`src/managed/workbench-shell/WorkbenchShell.tsx`
+  - 目标：承载菜单栏、工具条、活动栏、侧栏、底部面板、状态栏，并支持后续热更新。
+2. 剥离内容：`src/detached/**`
+  - 当前入口：`src/detached/content/DetachedContentRouter.tsx`
+  - 目标：承载 `CanvasBoard`、设置页与第三方内容工具包接入位。
+
+约束：
+
+1. 托管层升级不覆盖 `detached` 内容层。
+2. 壳层接管阶段不重写 `CanvasBoard` 业务状态机。
+3. 2D/3D/文本编辑等内核由甲方在剥离层自行安装与适配。
+
 ## 2. 运行与调试
 
 ### 2.1 本地开发

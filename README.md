@@ -76,9 +76,13 @@ pnpm preview
 
 ## 代码结构（速览）
 
-- `src/App.tsx`：应用壳（工具栏/历史记录/颜色选择等），渲染 `CanvasBoard`
+- `src/App.tsx`：应用壳入口（托管壳层状态、引擎选择、Inspector 事件桥）
+- `src/managed/workbench-shell/WorkbenchShell.tsx`：托管工作台壳层（可热更新）
+- `src/detached/content/DetachedContentRouter.tsx`：剥离内容路由（主画布/设置页）
 - `src/components/CanvasBoard.tsx`：核心交互层（状态机、事件处理、组合各层）
 - `src/components/cellTypes.ts`：领域类型（Cell/Edge/Port/Blocks 等）
+
+> 2026-03-14 起：项目进入“壳层托管 + 内容剥离”实施阶段。壳层支持热更新，业务内容继续在剥离层演进。
 
 Canvas 拆分目录：`src/components/canvas/`
 
