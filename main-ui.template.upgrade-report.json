@@ -1,0 +1,57 @@
+{
+  "mode": "write",
+  "targetDir": "C:\\Users\\Ethan\\CoreFiles\\ProjectsFile\\matheshop",
+  "scannedAt": "2026-03-14T09:13:47.561Z",
+  "shellVersion": {
+    "from": "1.1.0",
+    "to": "1.1.0",
+    "decision": "auto-apply",
+    "reason": "同主版本升级，允许自动覆盖。"
+  },
+  "compatibilityMatrix": [
+    {
+      "level": "A",
+      "rule": "同主版本或首次安装",
+      "action": "允许自动创建/覆盖。"
+    },
+    {
+      "level": "B",
+      "rule": "跨主版本升级或托管标识异常",
+      "action": "建议人工确认，默认跳过。"
+    },
+    {
+      "level": "C",
+      "rule": "目标文件无托管标识（疑似用户魔改）",
+      "action": "禁止自动覆盖。"
+    }
+  ],
+  "scannedFiles": 4,
+  "created": [
+    {
+      "file": "layout-engine/DockMainArea.tsx",
+      "level": "A",
+      "reason": "目标文件不存在，允许创建。"
+    },
+    {
+      "file": "layout-engine/resolvePaneMode.ts",
+      "level": "A",
+      "reason": "目标文件不存在，允许创建。"
+    },
+    {
+      "file": "settings-keybindings/sampleData.ts",
+      "level": "A",
+      "reason": "目标文件不存在，允许创建。"
+    }
+  ],
+  "updated": [
+    {
+      "file": "workbench-shell/WorkbenchShell.tsx",
+      "level": "A",
+      "reason": "检测到托管标识，允许覆盖更新。",
+      "sourceVersion": "1.0.0",
+      "targetVersion": "1.1.0"
+    }
+  ],
+  "skipped": [],
+  "conflicts": []
+}

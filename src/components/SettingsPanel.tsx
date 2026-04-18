@@ -1,13 +1,26 @@
 import { useEffect, useRef } from 'react'
 import type { EngineChoice, EngineSelectionState } from '../engine/engineSelection'
 
-export default function SettingsPanel(props: {
+/**
+ * 设置面板参数。
+ */
+export interface SettingsPanelProps {
+  /** 是否打开。 */
   open: boolean
+  /** 关闭回调。 */
   onClose: () => void
+  /** 引擎选择状态。 */
   engineSelection: EngineSelectionState
+  /** 引擎切换回调。 */
   onChangeEngineChoice: (choice: EngineChoice) => void
-}) {
-  const { open, onClose, engineSelection, onChangeEngineChoice } = props
+  /** 主题模式（可选）。 */
+  themeMode?: 'system' | 'light' | 'dark'
+  /** 主题切换回调（可选）。 */
+  onChangeThemeMode?: (mode: 'system' | 'light' | 'dark') => void
+}
+
+export default function SettingsPanel(props: SettingsPanelProps) {
+  const { open, onClose, engineSelection, onChangeEngineChoice, themeMode, onChangeThemeMode } = props
 
   const panelRef = useRef<HTMLDivElement | null>(null)
 
@@ -80,6 +93,32 @@ export default function SettingsPanel(props: {
             </div>
           </div>
         </div>
+
+        {themeMode && onChangeThemeMode ? (
+          <div className="settings-section">
+            <h4 style={{ margin: '8px 0' }}>主题模式</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(
+                [
+                  { value: 'system', label: '跟随系统' },
+                  { value: 'light', label: '浅色' },
+                  { value: 'dark', label: '深色' },
+                ] as Array<{ value: 'system' | 'light' | 'dark'; label: string }>
+              ).map((opt) => (
+                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="radio"
+                    name="matheshop-theme-mode"
+                    value={opt.value}
+                    checked={themeMode === opt.value}
+                    onChange={() => onChangeThemeMode(opt.value)}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

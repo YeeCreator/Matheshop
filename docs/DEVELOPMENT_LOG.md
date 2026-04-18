@@ -4,17 +4,17 @@
 
 ## 2026-03-05
 
-### 坐标迁移：相关适配工具全量迁移到 `viewport-kit-react`
+### 坐标迁移：相关适配工具全量迁移到 `viewport-2d-kit-react`
 
-- 将 `matheshop` 本地的坐标与相机适配实现迁移到 `viewport-kit-react`：
-  - 新增 `viewport-kit-react/src/coordinateAdapters.ts`
-  - 在 `viewport-kit-react/src/index.ts` 统一导出 `clientToLocalCssPoint/localCssToWorld/worldToLocalCssWithScroll/camera2DToLegacy/legacyToCamera2D/getDprScaleFromCanvas` 等函数。
+- 将 `matheshop` 本地的坐标与相机适配实现迁移到 `viewport-2d-kit-react`：
+  - 新增 `viewport-2d-kit-react/src/coordinateAdapters.ts`
+  - 在 `viewport-2d-kit-react/src/index.ts` 统一导出 `clientToLocalCssPoint/localCssToWorld/worldToLocalCssWithScroll/camera2DToLegacy/legacyToCamera2D/getDprScaleFromCanvas` 等函数。
 - `matheshop` 侧改造：
   - `CanvasBoard.tsx`、`CanvasCellLayer.tsx`、`CanvasCell.tsx`、`CanvasCellPorts.tsx`、`CanvasCellResizeHandle.tsx`、`FormulaLayer.tsx`、`EdgeLayer.tsx` 全部切换为从 `viewport-kit` 导入坐标与适配工具。
   - 删除本地重复实现：`src/components/canvas/utils/viewportCoords.ts`、`src/components/canvas/utils/viewportKitAdapter.ts`。
   - `src/components/canvas/utils/geometry.ts` 精简为仅保留 `clamp` 与 `resizeCanvasToDisplaySize`。
 - 兼容性与验证：
-  - `pnpm run predev` 通过（含 `viewport-kit-react` 与 `main-ui-react` 构建 + 依赖刷新）。
+  - `pnpm run predev` 通过（含 `viewport-2d-kit-react` 与 `main-ui-react` 构建 + 依赖刷新）。
   - `pnpm build` 通过。
   - `pnpm run dev:with-dependent` 可启动并成功拉起 Vite（`http://localhost:5173/`）。
 
@@ -237,7 +237,7 @@
 
 ## 2026-02-05
 
-- 重构：视口/相机系统迁移到本地第三方工具包 `viewport-kit-react`（包名 `viewport-kit`）。
+- 重构：视口/相机系统迁移到本地第三方工具包 `viewport-2d-kit-react`（包名 `viewport-kit`）。
   - `CanvasBoard.tsx` 使用 `useViewportCamera()` 作为权威相机来源。
   - 通过 `src/components/canvas/utils/viewportKitAdapter.ts` 保持与 legacy `Camera{x,y,zoom}` 的兼容，确保 `EdgeLayer/CanvasCellLayer/FormulaLayer` 行为不变。
   - wheel 平移、Ctrl/⌘+wheel 缩放（光标锚点）、pinch 缩放等行为保持与迁移前一致。
