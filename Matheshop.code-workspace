@@ -1,7 +1,16 @@
 {
 	"folders": [
 		{
+			"name": "matheshop",
 			"path": "."
+		},
+		{
+			"name": "main-ui-react",
+			"path": "../main-ui-react"
+		},
+		{
+			"name": "viewport-2d-kit-react",
+			"path": "../viewport-2d-kit-react"
 		},
 		{
 			"name": "Engs：Matheshop",
@@ -9,14 +18,8 @@
 		},
 		{
 			"name": "CS：数学符号计算",
-			"path": "../../../iCloudDrive/iCloud~md~obsidian/CS_notebook/Projects/数学符号计算"
-		},
-		{
-			"path": "../2d-viewport-kit-react"
-		},
-		{
-			"path": "../main-ui-react"
-		},
+			"path": "../../../iCloudDrive/iCloud~md~obsidian/ES_notebook/Projects/数学符号计算"
+		}
 	],
 	"settings": {}
 }
