@@ -11,8 +11,8 @@ export default defineConfig({
   resolve: {
     alias: {
       // 在开发时直接将包名映射到源码目录以获得更好的 HMR 体验
-      'main-ui-react': path.resolve(__dirname, '../main-ui-react/src'),
-      'viewport-kit': path.resolve(__dirname, '../2d-viewport-kit-react/src'),
+      'main-ui': path.resolve(__dirname, '../main-ui/src'),
+      'viewport-kit': path.resolve(__dirname, '../viewport-2d-kit/src'),
     },
   },
   server: {
@@ -20,8 +20,8 @@ export default defineConfig({
     fs: {
       allow: [
         path.resolve(__dirname, '..'),
-        path.resolve(__dirname, '../main-ui-react'),
-        path.resolve(__dirname, '../2d-viewport-kit-react'),
+        path.resolve(__dirname, '../main-ui'),
+        path.resolve(__dirname, '../viewport-2d-kit'),
       ],
     },
     proxy: {

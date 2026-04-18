@@ -24,6 +24,8 @@ import {
   ToolbarTitle,
   Toolbar,
   MatchFrame,
+  ThemeProvider,
+  type ThemeMode,
 } from 'main-ui-react/layout'
 
 const TOOL_LABELS: Record<Tool, string> = {
@@ -41,6 +43,12 @@ type InspectorSnapshot = {
 }
 
 function App() {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    if (typeof window === 'undefined') return 'system'
+    const stored = window.localStorage.getItem('matheshop:themeMode:v1')
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
+  })
+
   const [tool, setTool] = useState<Tool>('text')
   const [color, setColor] = useState('#111111')
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -73,6 +81,11 @@ function App() {
     window.dispatchEvent(new CustomEvent('matheshop:engineSelection', { detail: engineSelection }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem('matheshop:themeMode:v1', themeMode)
+  }, [themeMode])
 
   // simple layers placeholder
   const layers = useMemo(() => ['图层 1'], [])
@@ -112,27 +125,28 @@ function App() {
   }
 
   return (
-    <MatchFrame
-      preset="vscodium"
-      layout={{
-        // 宿主（matheshop）本身已让 #root/body 100% 高度，这里保持 main-ui-react 默认的 viewport 高度策略
-        heightMode: 'viewport',
-        leftSidebar: {
-          width: 220,
-          scroll: true,
-          padding: 12,
-          background: '#252526',
-          bordered: true,
-        },
-        rightSidebar: {
-          width: 360,
-          scroll: true,
-          padding: 12,
-          background: '#252526',
-          bordered: true,
-        },
-      }}
-      toolbar={
+    <ThemeProvider mode={themeMode} defaultMode="system" storageKey="matheshop:themeMode:v1" onModeChange={setThemeMode}>
+      <MatchFrame
+        preset="vscodium"
+        layout={{
+          // 宿主（matheshop）本身已让 #root/body 100% 高度，这里保持 main-ui-react 默认的 viewport 高度策略
+          heightMode: 'viewport',
+          leftSidebar: {
+            width: 220,
+            scroll: true,
+            padding: 12,
+            background: 'var(--main-ui-react-vscodium-sidebarBackground)',
+            bordered: true,
+          },
+          rightSidebar: {
+            width: 360,
+            scroll: true,
+            padding: 12,
+            background: 'var(--main-ui-react-vscodium-sidebarBackground)',
+            bordered: true,
+          },
+        }}
+        toolbar={
         activeView === 'settings' ? null : (
           <Toolbar
             preset="vscodium"
@@ -143,7 +157,7 @@ function App() {
                 <Button
                   variant="ghost"
                   onClick={() => setClearToken((x) => x + 1)}
-                  style={{ color: '#d4d4d4', borderColor: '#3c3c3c', background: '#2d2d2d' }}
+                  style={{ color: 'var(--main-ui-react-vscodium-textPrimary)', borderColor: 'var(--main-ui-react-vscodium-controlBorder)', background: 'var(--main-ui-react-vscodium-controlBackground)' }}
                 >
                   清空
                 </Button>
@@ -164,15 +178,15 @@ function App() {
                 aria-label="设置"
                 aria-expanded={false}
                 onClick={openSettings}
-                style={{ color: '#d4d4d4', borderColor: '#3c3c3c', background: '#2d2d2d' }}
+                style={{ color: 'var(--main-ui-react-vscodium-textPrimary)', borderColor: 'var(--main-ui-react-vscodium-controlBorder)', background: 'var(--main-ui-react-vscodium-controlBackground)' }}
               >
                 ⚙
               </IconButton>
             }
           />
         )
-      }
-      leftSidebar={
+        }
+        leftSidebar={
         activeView === 'settings' ? null : (
           <Panel preset="vscodium" title="工具">
             <List>
@@ -181,7 +195,7 @@ function App() {
                   key={t}
                   onClick={() => setTool(t)}
                   selected={tool === t}
-                  style={{ background: tool === t ? 'rgba(14, 99, 156, 0.3)' : '#2d2d2d', color: '#d4d4d4', borderColor: '#3c3c3c' }}
+                  style={{ background: tool === t ? 'var(--main-ui-react-vscodium-controlSelectedBackground)' : 'var(--main-ui-react-vscodium-controlBackground)', color: 'var(--main-ui-react-vscodium-controlText)', borderColor: 'var(--main-ui-react-vscodium-controlBorder)' }}
                 >
                   {TOOL_LABELS[t]}
                 </ListItem>
@@ -189,28 +203,30 @@ function App() {
             </List>
           </Panel>
         )
-      }
-      center={
+        }
+        center={
         <>
           <SettingsPanel
             open={activeView === 'settings'}
             onClose={closeSettings}
             engineSelection={engineSelection}
             onChangeEngineChoice={(choice) => setEngineSelection((prev) => ({ ...prev, choice }))}
+            themeMode={themeMode}
+            onChangeThemeMode={setThemeMode}
           />
 
           {activeView === 'settings' ? null : (
-            <ContentShell style={{ background: '#1e1e1e', color: '#d4d4d4' }}>
+            <ContentShell style={{ background: 'var(--main-ui-react-vscodium-viewportBackground)', color: 'var(--main-ui-react-vscodium-textPrimary)' }}>
               <Row wrap>
-                <MutedText style={{ color: '#9da2a6' }}>提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</MutedText>
+                <MutedText style={{ color: 'var(--main-ui-react-vscodium-textSecondary)' }}>提示：滚轮缩放；中键拖拽/按住空格拖拽平移；左键点击插入公式/文本</MutedText>
               </Row>
 
               <CanvasBoard tool={tool} color={color} onHistoryPush={pushHistory} requestClearToken={clearToken} />
             </ContentShell>
           )}
         </>
-      }
-      rightSidebar={
+        }
+        rightSidebar={
         activeView === 'settings' ? null : (
           <div className="math-right-sidebar-stack">
             <Panel preset="vscodium" title="Inspector">
@@ -234,7 +250,7 @@ function App() {
             <Panel preset="vscodium" title="图层">
               <List>
                 {layers.map((l) => (
-                  <ListItem key={l} style={{ background: '#2d2d2d', color: '#d4d4d4', borderColor: '#3c3c3c' }}>{l}</ListItem>
+                  <ListItem key={l} style={{ background: 'var(--main-ui-react-vscodium-controlBackground)', color: 'var(--main-ui-react-vscodium-controlText)', borderColor: 'var(--main-ui-react-vscodium-controlBorder)' }}>{l}</ListItem>
                 ))}
               </List>
             </Panel>
@@ -243,7 +259,7 @@ function App() {
               <TextArea
                 readOnly
                 monospace
-                style={{ background: '#1e1e1e', color: '#d4d4d4', borderColor: '#3c3c3c' }}
+                style={{ background: 'var(--main-ui-react-vscodium-viewportBackground)', color: 'var(--main-ui-react-vscodium-textPrimary)', borderColor: 'var(--main-ui-react-vscodium-controlBorder)' }}
                 value={
                   history.length === 0
                     ? '暂无'
@@ -257,8 +273,9 @@ function App() {
             </Panel>
           </div>
         )
-      }
-    />
+        }
+      />
+    </ThemeProvider>
   )
 }
 

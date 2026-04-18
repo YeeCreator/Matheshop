@@ -79,7 +79,7 @@ pnpm preview
 ### 2.4 调试建议
 
 - 交互问题优先从 `src/components/CanvasBoard.tsx` 的 pointer/keyboard handler 入手。
-- 坐标系相关 bug：优先检查 `viewport-kit-react/src/coordinateAdapters.ts`（通过包 `viewport-kit` 导入）与 `src/components/CanvasBoard.tsx` 的相机链路（`camera2d` 与 wrap 本地 CSS 坐标语义）。
+- 坐标系相关 bug：优先检查 `viewport-2d-kit-react/src/coordinateAdapters.ts`（通过包 `viewport-kit` 导入）与 `src/components/CanvasBoard.tsx` 的相机链路（`camera2d` 与 wrap 本地 CSS 坐标语义）。
 
 ## 2.4.1 Canvas 画布节点（Cell）组件拆分（2026-01-10）
 
@@ -772,7 +772,7 @@ pnpm build
 
 ## 2.4.2 视口系统（Viewport）迁移到 viewport-kit（2026-02-05）
 
-为统一不同项目的视口交互体验，并减少维护成本，Matheshop 的视口/相机交互已切换为本地第三方工具包 `viewport-kit-react`（包名：`viewport-kit`）。
+为统一不同项目的视口交互体验，并减少维护成本，Matheshop 的视口/相机交互已切换为本地第三方工具包 `viewport-2d-kit-react`（包名：`viewport-kit`）。
 
 ### 现状与约定
 
