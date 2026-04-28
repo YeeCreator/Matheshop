@@ -14,11 +14,11 @@
 		},
 		{
 			"name": "Engs：Matheshop",
-			"path": "../../../iCloudDrive/iCloud~md~obsidian/Engs_notebook/Projects/Matheshop"
+			"path": "../Engs_notebook/Projects/Matheshop"
 		},
 		{
-			"name": "CS：数学符号计算",
-			"path": "../../../iCloudDrive/iCloud~md~obsidian/ES_notebook/Projects/数学符号计算"
+			"name": "ES：数学符号计算",
+			"path": "../ES_notebook/Projects/数学符号计算"
 		}
 	],
 	"settings": {}

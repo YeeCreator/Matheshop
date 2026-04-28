@@ -13,8 +13,8 @@
  */
 import katex from 'katex'
 import type React from 'react'
-import type { Camera2D } from 'viewport-kit'
-import { clientToLocalCssPoint, localCssToWorld, worldToLocalCssWithScroll } from 'viewport-kit'
+import type { Camera2D } from 'viewport-kit/core'
+import { clientToLocalCssPoint, localCssToWorld, worldToLocalCssWithScroll } from 'viewport-kit/core'
 
 type FormulaItem = {
   id: string

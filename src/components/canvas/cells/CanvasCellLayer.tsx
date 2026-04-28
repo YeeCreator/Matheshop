@@ -15,8 +15,8 @@ import { updateCellById } from '../domain/cellTree'
 import type { InlineSelection } from '../exprSelection'
 import CanvasCell from './CanvasCell'
 import { getCellRenderModel } from './getCellRenderModel'
-import type { Camera2D } from 'viewport-kit'
-import { worldToLocalCssWithScroll } from 'viewport-kit'
+import type { Camera2D } from 'viewport-kit/core'
+import { worldToLocalCssWithScroll } from 'viewport-kit/core'
 
 export type DraggingEdgeState =
   | null

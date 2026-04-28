@@ -13,8 +13,8 @@
 import type React from 'react'
 import type { CanvasEdge, CellId, CellNode, PortSide } from '../cellTypes'
 import { collectCellWorldHits, findCellById } from './domain/cellTree'
-import type { Camera2D } from 'viewport-kit'
-import { worldToLocalCss } from 'viewport-kit'
+import type { Camera2D } from 'viewport-kit/core'
+import { worldToLocalCss } from 'viewport-kit/core'
 
 export type EdgeLayerProps = {
   edges: CanvasEdge[]

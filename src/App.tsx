@@ -26,7 +26,7 @@ import {
   MatchFrame,
   ThemeProvider,
   type ThemeMode,
-} from 'main-ui-react/layout'
+} from 'main-ui/react/layout'
 
 const TOOL_LABELS: Record<Tool, string> = {
   text: '文本/公式',

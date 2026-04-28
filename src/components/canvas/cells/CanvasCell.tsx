@@ -24,8 +24,8 @@ import CanvasCellSelectionOutline from './CanvasCellSelectionOutline'
 import CanvasCellDropHint from './CanvasCellDropHint'
 import type { InlineSelection } from '../exprSelection'
 import type { Token } from '../../../../engine/engine_ts/src/index'
-import type { Camera2D } from 'viewport-kit'
-import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
+import type { Camera2D } from 'viewport-kit/core'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit/core'
 
 export type CanvasCellProps = {
   cell: CellNode

@@ -31,7 +31,6 @@ import {
 } from './canvas/utils/geometry'
 // 新增：viewport-kit 相机交互（作为唯一的 camera 状态来源）
 import {
-  useViewportCamera,
   applyCameraToCanvas2D,
   getVisibleWorldBox,
   type LegacyCamera,
@@ -40,7 +39,8 @@ import {
   legacyToCamera2D,
   clientToLocalCssPoint,
   localCssToWorld,
-} from 'viewport-kit'
+} from 'viewport-kit/core'
+import { useViewportCamera } from 'viewport-kit/react'
 import { parseBlocksFromText } from './canvas/utils/blocks'
 
 import type { InlineSelection } from './canvas/exprSelection'
