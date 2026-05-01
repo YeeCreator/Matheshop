@@ -10,8 +10,8 @@
  */
 import React from 'react'
 import type { CellNode } from '../../cellTypes'
-import type { Camera2D } from 'viewport-kit'
-import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
+import type { Camera2D } from 'viewport-2d-kit'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-2d-kit'
 
 export type CanvasCellResizeHandleProps = {
   cell: CellNode

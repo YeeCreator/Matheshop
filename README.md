@@ -6,7 +6,7 @@
 
 ## 功能概览
 
-- **画布相机（Camera）**：滚轮缩放、平移（当前由通用工具包 `viewport-kit` 提供相机模型与 wheel/pinch 交互；画布网格属于世界空间的一部分，会随相机平移/缩放变换）
+- **画布相机（Camera）**：滚轮缩放、平移（当前由通用工具包 `viewport-2d-kit` 提供相机模型与 wheel/pinch 交互；画布网格属于世界空间的一部分，会随相机平移/缩放变换）
 - **单元框（Cell）**
   - 单击选中、拖拽移动
   - 双击进入编辑（文本域）
@@ -101,12 +101,12 @@ Canvas 拆分目录：`src/components/canvas/`
 
 ### 0. 视口系统迁移说明
 
-当前 Matheshop 的“相机平移/缩放/捏合”等视口操作由通用工具包 `viewport-kit` 提供：
+当前 Matheshop 的“相机平移/缩放/捏合”等视口操作由通用工具包 `viewport-2d-kit` 提供：
 
-- 滚轮平移、Ctrl/⌘+滚轮缩放、触摸捏合缩放：由 `viewport-kit` 统一处理
-- 拖拽平移：由 `viewport-kit` 统一实现相机更新，Matheshop 仅提供“何时允许平移”的业务条件（中键拖拽 / 空格按住+左键拖拽）
+- 滚轮平移、Ctrl/⌘+滚轮缩放、触摸捏合缩放：由 `viewport-2d-kit` 统一处理
+- 拖拽平移：由 `viewport-2d-kit` 统一实现相机更新，Matheshop 仅提供“何时允许平移”的业务条件（中键拖拽 / 空格按住+左键拖拽）
 
-> 备注：网格仍然是世界空间（world space）的一部分，由 Matheshop 在 world 坐标中绘制；`viewport-kit` 只负责相机与 world↔screen 换算。
+> 备注：网格仍然是世界空间（world space）的一部分，由 Matheshop 在 world 坐标中绘制；`viewport-2d-kit` 只负责相机与 world↔screen 换算。
 
 ### 4. 安装依赖时为什么出现 `deprecated subdependencies` 警告？
 

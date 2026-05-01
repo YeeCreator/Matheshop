@@ -8,13 +8,13 @@
  * - 支持拖拽连线时的预览路径（draggingEdge）。
  *
  * 坐标换算：
- * - viewport-kit：world -> screen(CSS px, 基于 camera2d)
+ * - viewport-2d-kit：world -> screen(CSS px, 基于 camera2d)
  */
 import type React from 'react'
 import type { CanvasEdge, CellId, CellNode, PortSide } from '../cellTypes'
 import { collectCellWorldHits, findCellById } from './domain/cellTree'
-import type { Camera2D } from 'viewport-kit'
-import { worldToLocalCss } from 'viewport-kit'
+import type { Camera2D } from 'viewport-2d-kit'
+import { worldToLocalCss } from 'viewport-2d-kit'
 
 export type EdgeLayerProps = {
   edges: CanvasEdge[]
@@ -48,7 +48,7 @@ export default function EdgeLayer(props: EdgeLayerProps) {
   const hits = collectCellWorldHits(cells)
 
   const worldToCss = (world: { x: number; y: number }) => {
-    // 现在使用 viewport-kit 的 camera2d（screen=容器本地 CSS px）。
+    // 现在使用 viewport-2d-kit 的 camera2d（screen=容器本地 CSS px）。
     return worldToLocalCss(wrapEl, camera, world)
   }
 

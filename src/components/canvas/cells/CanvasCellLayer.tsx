@@ -7,7 +7,7 @@
  * - 将选择、编辑、hover port、连线模式、拖拽边、缩放等交互状态集中下发给 `CanvasCell`。
  *
  * 坐标系统说明：
- * - 本层统一使用 viewport-kit 语义：world -> wrap 本地 CSS 坐标。
+ * - 本层统一使用 viewport-2d-kit 语义：world -> wrap 本地 CSS 坐标。
  */
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
@@ -15,8 +15,8 @@ import { updateCellById } from '../domain/cellTree'
 import type { InlineSelection } from '../exprSelection'
 import CanvasCell from './CanvasCell'
 import { getCellRenderModel } from './getCellRenderModel'
-import type { Camera2D } from 'viewport-kit'
-import { worldToLocalCssWithScroll } from 'viewport-kit'
+import type { Camera2D } from 'viewport-2d-kit'
+import { worldToLocalCssWithScroll } from 'viewport-2d-kit'
 
 export type DraggingEdgeState =
   | null

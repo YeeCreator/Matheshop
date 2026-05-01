@@ -11,7 +11,7 @@
  * - 其它区域 pointerdown 会 preventDefault + stopPropagation，防止画布层误吃事件。
  *
  * 坐标约定：
- * - 迁移后统一使用 viewport-kit 的语义：screen = wrap 容器本地 CSS px。
+ * - 迁移后统一使用 viewport-2d-kit 的语义：screen = wrap 容器本地 CSS px。
  */
 import React from 'react'
 import type { CellId, CellNode, PortSide } from '../../cellTypes'
@@ -24,8 +24,8 @@ import CanvasCellSelectionOutline from './CanvasCellSelectionOutline'
 import CanvasCellDropHint from './CanvasCellDropHint'
 import type { InlineSelection } from '../exprSelection'
 import type { Token } from '../../../../engine/engine_ts/src/index'
-import type { Camera2D } from 'viewport-kit'
-import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
+import type { Camera2D } from 'viewport-2d-kit'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-2d-kit'
 
 export type CanvasCellProps = {
   cell: CellNode
@@ -179,7 +179,7 @@ export default function CanvasCell(props: CanvasCellProps) {
     onToggleCollapse,
   } = props
 
-  // 旧的 getScreenFromWrap 已废弃：坐标入口迁移到 viewport-kit（screen=wrap 本地 CSS px）。
+  // 旧的 getScreenFromWrap 已废弃：坐标入口迁移到 viewport-2d-kit（screen=wrap 本地 CSS px）。
 
   // cell 当前中心点 world（用于中心缩放锚点）
   const cellCenterWorld = {

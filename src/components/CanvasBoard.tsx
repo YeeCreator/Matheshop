@@ -29,7 +29,7 @@ import {
   clamp,
   resizeCanvasToDisplaySize,
 } from './canvas/utils/geometry'
-// 新增：viewport-kit 相机交互（作为唯一的 camera 状态来源）
+// 新增：viewport-2d-kit 相机交互（作为唯一的 camera 状态来源）
 import {
   useViewportCamera,
   applyCameraToCanvas2D,
@@ -40,7 +40,7 @@ import {
   legacyToCamera2D,
   clientToLocalCssPoint,
   localCssToWorld,
-} from 'viewport-kit'
+} from 'viewport-2d-kit'
 import { parseBlocksFromText } from './canvas/utils/blocks'
 
 import type { InlineSelection } from './canvas/exprSelection'
@@ -103,13 +103,13 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const redoRef = useRef<Stroke[]>([])
   const backgroundRef = useRef<string>('#ffffff')
 
-  // 旧 camera 仍保留（下游 layer 目前依赖它），但其值将由 viewport-kit camera2d 派生。
+  // 旧 camera 仍保留（下游 layer 目前依赖它），但其值将由 viewport-2d-kit camera2d 派生。
   const cameraRef = useRef<LegacyCamera>({ x: 0, y: 0, zoom: 1 })
 
   // 记录最近一次鼠标位置（容器本地 CSS 像素），用于某些设备上 ctrl+wheel 的锚点推断。
   const lastCursorLocalRef = useRef<{ x: number; y: number } | null>(null)
 
-  // viewport-kit camera（权威相机）
+  // viewport-2d-kit camera（权威相机）
   const viewport = useViewportCamera({
     containerRef: wrapRef,
     // matheshop 没有固定世界边界，fit 行为只用于初始化 scale；这里给一个足够大的 viewBox。
@@ -130,7 +130,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       // 这样不会抢占 cell 的普通左键拖拽/框选。
       dragPanCondition: (e: unknown) => {
         // buttons 位：4=中键按下（pointer move 时也适用）
-        // 注意：这里的 e 是 viewport-kit 抽象事件，Matheshop 会在转换时带上 buttons。
+        // 注意：这里的 e 是 viewport-2d-kit 抽象事件，Matheshop 会在转换时带上 buttons。
         const anyE = e as unknown as { buttons?: number; button?: number }
         const isMiddleByButtons = typeof anyE.buttons === 'number' ? (anyE.buttons & 4) === 4 : false
         const isLeft = typeof anyE.button === 'number' ? anyE.button === 0 : true
@@ -188,7 +188,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const dragStartTimerRef = useRef<number | null>(null)
 
   // --- 交互状态（refs/state）---
-  // viewportPanRef：旧的 legacy 平移逻辑已迁移到 viewport-kit（见 viewportHandlers + dragPanCondition）。
+  // viewportPanRef：旧的 legacy 平移逻辑已迁移到 viewport-2d-kit（见 viewportHandlers + dragPanCondition）。
   // 为避免回归，这里保留类型占位但不再使用。
   // const viewportPanRef = useRef<null | {
   // pointerId: number
@@ -406,7 +406,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
      *
      * 因此这里做的是：
      * 1) 将 ctx 先映射到“workspace 的 CSS px”域（处理 HiDPI）；
-     * 2) 再应用 viewport-kit 的 camera2d 变换（world -> screen(CSS px)）。
+     * 2) 再应用 viewport-2d-kit 的 camera2d 变换（world -> screen(CSS px)）。
      */
 
     // canvas.width/height 是像素缓冲区，canvasRect 是 workspace 的 CSS 尺寸。
@@ -671,7 +671,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
   const isBoxSelectingRef = useRef(false)
 
   // 基于可滚动容器（canvas-wrap）计算“画布像素坐标”。
-  // 注意：这套 client->workspaceCSS->canvasPx 的旧链路已迁移到 viewport-kit 语义（screen=wrap 本地 CSS px）。
+  // 注意：这套 client->workspaceCSS->canvasPx 的旧链路已迁移到 viewport-2d-kit 语义（screen=wrap 本地 CSS px）。
   // 旧实现 getScreenFromWrap 已删除，避免后续继续误用。
 
   // 新的坐标入口：client -> 屏幕空间（wrap 容器本地 CSS px）
@@ -783,7 +783,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const isMiddle = e.button === 1
     const isMiddleByButtons = (e.buttons & 4) === 4
 
-    // 中键 或 空格+左键：视口平移（交给 viewport-kit）
+    // 中键 或 空格+左键：视口平移（交给 viewport-2d-kit）
     if (isMiddle || isMiddleByButtons || (isSpaceDown && e.button === 0)) {
       viewportHandlers.onPointerDown({
         pointerId: e.pointerId,
@@ -889,8 +889,8 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // 如果当前是 viewport-kit 的拖拽平移状态，让它优先处理并返回。
-    // 说明：viewport-kit 内部通过 pointer capture + pointers map 维持状态。
+    // 如果当前是 viewport-2d-kit 的拖拽平移状态，让它优先处理并返回。
+    // 说明：viewport-2d-kit 内部通过 pointer capture + pointers map 维持状态。
     const isMiddleByButtons = (e.buttons & 4) === 4
     if (isMiddleByButtons || (isSpaceDown && (e.buttons & 1) === 1)) {
       viewportHandlers.onPointerMove({
@@ -1044,7 +1044,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
 
     // 视口平移：本地 viewportPanRef
-    // 已迁移到 viewport-kit（见上面的 viewportHandlers.onPointerMove），此分支不再需要。
+    // 已迁移到 viewport-2d-kit（见上面的 viewportHandlers.onPointerMove），此分支不再需要。
     // if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) { ... }
 
     // ...existing code...
@@ -1055,7 +1055,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     if (!canvas) return
     e.preventDefault()
 
-    // 先尝试交给 viewport-kit 结束（如果该 pointerId 属于它的 capture）
+    // 先尝试交给 viewport-2d-kit 结束（如果该 pointerId 属于它的 capture）
     viewportHandlers.onPointerUp({
       pointerId: e.pointerId,
       clientX: e.clientX,
@@ -1156,13 +1156,13 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     }
 
     // 结束视口平移
-    // 已迁移到 viewport-kit（见上面的 viewportHandlers.onPointerUp），此分支不再需要。
+    // 已迁移到 viewport-2d-kit（见上面的 viewportHandlers.onPointerUp），此分支不再需要。
     // if (viewportPanRef.current && viewportPanRef.current.pointerId === e.pointerId) { ... }
 
     // ...existing code...
   }
 
-  // 新增：把 client 坐标转换为容器本地 CSS 像素（用于 viewport-kit）
+  // 新增：把 client 坐标转换为容器本地 CSS 像素（用于 viewport-2d-kit）
   const getLocalFromWrap = useCallback(
     (clientX: number, clientY: number) => {
       const wrap = wrapRef.current
@@ -1173,7 +1173,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
     [],
   )
 
-  // wheel：改为交给 viewport-kit 处理；同时保持 shift+wheel 横向平移的旧体验。
+  // wheel：改为交给 viewport-2d-kit 处理；同时保持 shift+wheel 横向平移的旧体验。
   useEffect(() => {
     const wrap = wrapRef.current
     if (!wrap) return
@@ -1188,7 +1188,7 @@ export default function CanvasBoard(props: CanvasBoardProps) {
       const isZoomGesture = ev.ctrlKey || ev.metaKey
       if (ev.shiftKey && !isZoomGesture) {
         // 与旧逻辑一致：shift+wheel 主要用于横向平移。
-        // viewport-kit 的 wheelPan 是按 deltaX/deltaY 平移，这里把 deltaY 映射到 deltaX。
+        // viewport-2d-kit 的 wheelPan 是按 deltaX/deltaY 平移，这里把 deltaY 映射到 deltaX。
         const canvas = canvasRef.current
         if (canvas) {
           const dprScale = getDprScaleFromCanvas(canvas)

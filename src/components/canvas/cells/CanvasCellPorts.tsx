@@ -11,8 +11,8 @@
  */
 import React from 'react'
 import type { CellId, PortSide } from '../../cellTypes'
-import type { Camera2D } from 'viewport-kit'
-import { clientToLocalCssPoint, localCssToWorld } from 'viewport-kit'
+import type { Camera2D } from 'viewport-2d-kit'
+import { clientToLocalCssPoint, localCssToWorld } from 'viewport-2d-kit'
 
 export type CanvasCellPortsProps = {
   cellId: CellId
