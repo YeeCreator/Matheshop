@@ -40,7 +40,7 @@ import {
   clientToLocalCssPoint,
   localCssToWorld,
 } from 'viewport-kit/core'
-import { useViewportCamera } from 'viewport-kit/react'
+import { useViewportCamera } from '../viewport/useViewportCamera'
 import { parseBlocksFromText } from './canvas/utils/blocks'
 
 import type { InlineSelection } from './canvas/exprSelection'

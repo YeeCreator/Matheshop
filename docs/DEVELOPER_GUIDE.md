@@ -79,7 +79,7 @@ pnpm preview
 ### 2.4 调试建议
 
 - 交互问题优先从 `src/components/CanvasBoard.tsx` 的 pointer/keyboard handler 入手。
-- 坐标系相关 bug：优先检查 `viewport-2d-kit-react/src/coordinateAdapters.ts`（通过包 `viewport-kit` 导入）与 `src/components/CanvasBoard.tsx` 的相机链路（`camera2d` 与 wrap 本地 CSS 坐标语义）。
+- 坐标系相关 bug：优先检查 `viewport-2d-kit/src/coordinateAdapters.ts`（通过包 `viewport-2d-kit` 导入）与 `src/components/CanvasBoard.tsx` 的相机链路（`camera2d` 与 wrap 本地 CSS 坐标语义）。
 
 ## 2.4.1 Canvas 画布节点（Cell）组件拆分（2026-01-10）
 
@@ -747,9 +747,9 @@ pnpm build
 
 > 备注：如果后续需要“空内容自动删除”的模式，可以引入显式的删除操作（例如 Backspace/Delete 或右键菜单），而不是在提交时隐式删除。
 
-## 主界面 UI 外壳（main-ui-react）
+## 主界面 UI 外壳（宿主侧过渡壳层）
 
-为降低主界面布局代码的耦合度，`matheshop` 目前直接复用工作区内的本地组件包 `main-ui-react`，用于提供：顶部工具条、左侧栏、右侧栏与中心内容区的基础布局外壳。
+为避免继续依赖已废弃的旧 React 壳层包，`matheshop` 当前在宿主侧提供过渡 React 壳层，用于承载顶部工具条、左侧栏、右侧栏与中心内容区。`main-ui` 保持 Vue3 + core 的主内核定位，不重新引入 React 运行时导出。
 
 ### 设计约束
 
@@ -758,28 +758,28 @@ pnpm build
 
 ### 关键文件
 
-- `src/App.tsx`：使用 `MatchFrame` 与 `Toolbar` 组织主界面布局。
-- `main-ui-react/src/MatchFrame.tsx`：三栏 + 顶部工具条布局骨架。
-- `main-ui-react/src/Toolbar.tsx`：顶部工具条插槽组件。
+- `src/App.tsx`：使用宿主侧 `MatchFrame` 与 `Toolbar` 组织主界面布局。
+- `src/managed/workbench-shell/reactLayout.tsx`：React 过渡壳层，提供 `MatchFrame`、`Toolbar`、`Panel` 等轻量布局组件。
+- `src/LegacyReactAppHost.vue`：Vue 入口下挂载现有 React 应用，作为迁移期承载路径。
 
 ### 依赖与开发方式
 
 `matheshop/package.json` 通过本地依赖的方式引用：
 
-- `"main-ui-react": "file:../main-ui-react"`
+- `"main-ui": "link:../main-ui"`
 
-注意：`main-ui-react` 的产物在 `dist/`，如在开发中修改了 `main-ui-react` 源代码，需要在其项目内执行构建以刷新导出。
+注意：宿主侧 React 过渡壳层属于 `matheshop` 自身代码；如需联调新的 `main-ui` 内核，使用 `pnpm run dev:ui` 启动同级 `main-ui` 的 watch 构建。
 
-## 2.4.2 视口系统（Viewport）迁移到 viewport-kit（2026-02-05）
+## 2.4.2 视口系统（Viewport）迁移到 viewport-2d-kit（2026-02-05）
 
-为统一不同项目的视口交互体验，并减少维护成本，Matheshop 的视口/相机交互已切换为本地第三方工具包 `viewport-2d-kit-react`（包名：`viewport-kit`）。
+为统一不同项目的视口交互体验，并减少维护成本，Matheshop 的视口/相机交互已切换为本地第三方工具包 `viewport-2d-kit`（包名：`viewport-2d-kit`）。
 
 ### 现状与约定
 
 - **权威相机来源**：`src/components/CanvasBoard.tsx` 内使用 `useViewportCamera()` 作为唯一的相机状态来源（缩放/滚轮平移/触控缩放等）。
 - **兼容旧层渲染**：由于现有 `EdgeLayer` / `CanvasCellLayer` / `FormulaLayer` 仍依赖旧的 `Camera`（`{ x, y, zoom }`）与 `screenToWorld()` 等几何工具，当前保留 `cameraRef.current` 作为 **legacy camera**。
-  - `cameraRef.current` 的值由 viewport-kit 的 `camera2d` 派生而来。
-  - `camera2d` 与 legacy camera 的互相转换在 `src/components/canvas/utils/viewportKitAdapter.ts`。
+  - `cameraRef.current` 的值由 `viewport-2d-kit` 的 `camera2d` 派生而来。
+  - `camera2d` 与 legacy camera 的互相转换由 `viewport-2d-kit` 的坐标适配工具提供。
 
 ### 交互行为对齐（与迁移前保持一致）
 
@@ -790,14 +790,14 @@ pnpm build
 
 ### 后续重构建议
 
-- 若要彻底移除 legacy camera：需要将 `geometry.ts` 与各 Layer 内部的 screen/world 换算逐步替换为 viewport-kit 的坐标/矩阵工具，并收敛所有“容器滚动 + canvas DPR”路径。
+- 若要彻底移除 legacy camera：需要将 `geometry.ts` 与各 Layer 内部的 screen/world 换算逐步替换为 `viewport-2d-kit` 的坐标/矩阵工具，并收敛所有“容器滚动 + canvas DPR”路径。
 - 如出现缩放锚点不稳定：优先检查 `CanvasBoard.tsx` 中 `lastCursorLocalRef` 的更新是否覆盖了所有 pointer move 场景。
 
 ## 2.4.3 网格（Grid）与视口（Viewport）职责边界（2026-03-05）
 
 - 网格是 **world space** 的一部分，语义上等同于“画在地面上的参考线”，必须与 cell/edge/formula 处于同一坐标系。
 - 视口（camera）变化时，网格应与 world 内容一起变化（用户观感为与内容同向缩放、反向平移）。
-- `viewport-kit` 负责通用相机能力（camera 模型、手势、坐标换算、渲染 helper），不承载 Matheshop 的业务网格规则。
+- `viewport-2d-kit` 负责通用相机能力（camera 模型、手势、坐标换算、渲染 helper），不承载 Matheshop 的业务网格规则。
 - 在 `src/components/CanvasBoard.tsx` 中，网格可见范围应按 **当前可视容器 `wrap`** 计算：
   - 使用 `wrap.getBoundingClientRect()` 作为可视宽高输入 `getVisibleWorldBox(camera2d, size)`。
   - 不要使用 workspace/canvas 的总尺寸去推导“当前可见世界范围”，否则会出现网格与真实视口脱节。
