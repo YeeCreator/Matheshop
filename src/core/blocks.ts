@@ -5,6 +5,32 @@ const createBlockId = () => globalThis.crypto?.randomUUID?.() ?? `block-${Date.n
 
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
+const containsCjk = /[\u3400-\u9fff]/
+const mathLikePattern = /\\|\^|_|=|\+|-|\*|\/|\(|\)|\[|\]|\{|\}|\d/
+
+function looksLikeMathLine(line: string): boolean {
+  const value = line.trim()
+  if (!value) return false
+  if (containsCjk.test(value)) return false
+  if (mathLikePattern.test(value)) return true
+  return /^[A-Za-z]+$/.test(value)
+}
+
+function pushImplicitBlocks(blocks: CellBlock[], text: string): void {
+  const normalized = text.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+
+  for (const line of lines) {
+    if (!line.trim()) continue
+    if (looksLikeMathLine(line)) {
+      blocks.push({ id: createBlockId(), type: 'latex', latex: line.trim(), displayMode: true } satisfies LatexBlock)
+      continue
+    }
+
+    blocks.push({ id: createBlockId(), type: 'text', text: line } satisfies TextBlock)
+  }
+}
+
 export function parseBlocksFromText(raw: string): CellBlock[] {
   const source = raw ?? ''
   const blocks: CellBlock[] = []
@@ -15,7 +41,7 @@ export function parseBlocksFromText(raw: string): CellBlock[] {
   while ((match = latexPattern.exec(source))) {
     const before = source.slice(lastIndex, match.index)
     if (before.trim().length > 0) {
-      blocks.push({ id: createBlockId(), type: 'text', text: before } satisfies TextBlock)
+      pushImplicitBlocks(blocks, before)
     }
 
     blocks.push({
@@ -30,7 +56,11 @@ export function parseBlocksFromText(raw: string): CellBlock[] {
 
   const rest = source.slice(lastIndex)
   if (rest.trim().length > 0 || blocks.length === 0) {
-    blocks.push({ id: createBlockId(), type: 'text', text: rest } satisfies TextBlock)
+    pushImplicitBlocks(blocks, rest)
+  }
+
+  if (blocks.length === 0) {
+    blocks.push({ id: createBlockId(), type: 'text', text: '' } satisfies TextBlock)
   }
 
   return blocks

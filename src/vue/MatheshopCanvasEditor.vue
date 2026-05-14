@@ -155,7 +155,7 @@ const edgePath = (edge: MatheshopEdge) => {
 const clientToWorld = (event: MouseEvent | PointerEvent, camera: Viewport2DCamera): Vec2 => {
   const rect = viewportHost.value?.getBoundingClientRect()
   if (!rect) return { x: 0, y: 0 }
-  return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, camera)
+  return screenToWorld(camera, { x: event.clientX - rect.left, y: event.clientY - rect.top })
 }
 
 const onCanvasDoubleClick = (event: MouseEvent, camera: Viewport2DCamera) => {

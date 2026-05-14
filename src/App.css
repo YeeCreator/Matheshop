@@ -1,42 +1,17 @@
-.matheshop-editor {
-  min-width: 0;
-  min-height: 0;
-  width: 100%;
-  height: 100%;
-  display: grid;
-  grid-template-columns: 210px minmax(0, 1fr) 320px;
-  background: var(--main-ui-bg);
-  color: var(--main-ui-text);
-}
-
-.matheshop-panel {
-  min-width: 0;
-  min-height: 0;
-  border-right: 1px solid var(--main-ui-border);
-  background: var(--main-ui-panel);
-  padding: 10px;
-  overflow: auto;
-}
-
-.matheshop-panel--inspector {
-  border-right: 0;
-  border-left: 1px solid var(--main-ui-border);
-}
-
-.matheshop-panel h2,
+.matheshop-side-content h2,
 .matheshop-settings h2,
 .matheshop-settings h3 {
   margin: 0 0 8px;
   font-size: 13px;
 }
 
-.matheshop-panel p,
+.matheshop-side-content p,
 .matheshop-settings p {
   margin: 0 0 12px;
   color: var(--main-ui-text-muted);
 }
 
-.matheshop-panel dl,
+.matheshop-side-content dl,
 .matheshop-settings dl {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -44,12 +19,12 @@
   margin: 0 0 14px;
 }
 
-.matheshop-panel dt,
+.matheshop-side-content dt,
 .matheshop-settings dt {
   color: var(--main-ui-text-muted);
 }
 
-.matheshop-panel dd,
+.matheshop-side-content dd,
 .matheshop-settings dd {
   min-width: 0;
   margin: 0;
@@ -57,8 +32,7 @@
 }
 
 .matheshop-tool-button,
-.matheshop-stage__toolbar button,
-.matheshop-panel button {
+.matheshop-side-content button {
   width: 100%;
   min-height: 28px;
   border: 1px solid var(--main-ui-border);
@@ -96,26 +70,9 @@
   padding: 0;
 }
 
-.matheshop-stage {
+.matheshop-toolbar-status {
   min-width: 0;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: 36px minmax(0, 1fr);
-}
-
-.matheshop-stage__toolbar {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 88px;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  border-bottom: 1px solid var(--main-ui-border);
-  background: var(--main-ui-panel);
-}
-
-.matheshop-stage__toolbar span {
-  min-width: 0;
+  display: block;
   overflow: hidden;
   color: var(--main-ui-text-muted);
   text-overflow: ellipsis;
