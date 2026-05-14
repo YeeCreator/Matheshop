@@ -2,6 +2,20 @@
 
 > 规则：每次新增功能/改动/修复错误，在校验与完工时把变动追加到本日志，并同步更新相关开发者文档/用户文档/README（如适用）。
 
+## 2026-05-14
+
+### 架构迁移：全栈切换到 Vue3 + TypeScript core
+
+- 移除旧 React 编译入口与历史 React 组件树，入口统一为 `src/main.ts` + `src/App.vue`。
+- 使用 `main-ui/vue` 提供工作台壳层，注册 Matheshop 画布 editor 与设置 editor。
+- 使用 `viewport-2d-kit/vue` 和 `viewport-2d-kit/core` 统一处理二维视口渲染与 screen/world 坐标换算。
+- 新增 `src/core/` 作为框架无关 TypeScript core，负责画布快照、Cell/Edge、编辑、移动、缩放、连线与求值。
+- 新增 `src/vue/` 渲染层，Vue 组件只订阅 core 快照并转发用户事件。
+- 前端默认计算引擎改为 `builtin_python`，后端服务通过 `MATHSYMCALC_ENGINE_ROOT` 对接外部 `C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`。
+- 移除 Python 服务 requirements 中对外部引擎的 editable 安装要求，改为运行时路径注入，避免外部 flat-layout 仓库被 setuptools 自动发现阻塞安装。
+- 刷新 `package.json` 与 `pnpm-lock.yaml`：保留 `vue`、`main-ui`、`viewport-2d-kit`、`katex`，移除旧 React/Radix/TanStack 等直接依赖。
+- 校验：`pnpm build` 通过；生产预览 `http://127.0.0.1:4173/` 显示 `main-ui Vue3 workbench` 与 Vue 画布；Python 服务入口调用 `eval_text('1+2*3')` 返回 `7.0`。
+
 ## 2026-05-02
 
 ### 修复：同步 main-ui 独立拆分后的宿主接入口径

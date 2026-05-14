@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -8,7 +7,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), react()],
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      'main-ui/styles.css': path.resolve(__dirname, '../main-ui/src/vue/styles/main-ui.css'),
+      'main-ui/core': path.resolve(__dirname, '../main-ui/src/core/index.ts'),
+      'main-ui/vue': path.resolve(__dirname, '../main-ui/src/vue/index.ts'),
+      'viewport-2d-kit/core': path.resolve(__dirname, '../viewport-2d-kit/src/core/index.ts'),
+      'viewport-2d-kit/vue': path.resolve(__dirname, '../viewport-2d-kit/src/vue/index.ts'),
+    },
+  },
   server: {
     // 允许 Vite 访问工作区外的源码（本地库的源代码目录）
     fs: {
