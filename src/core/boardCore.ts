@@ -20,6 +20,10 @@ export type MatheshopBoardSnapshot = {
 
 export type MatheshopBoardListener = (snapshot: MatheshopBoardSnapshot) => void
 
+export type CreateMatheshopBoardCoreOptions = {
+  initialSnapshot?: MatheshopBoardSnapshot
+}
+
 const createId = (prefix: string) => `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`
 
 const defaultCellSize: Size = { w: 240, h: 132 }
@@ -54,42 +58,47 @@ const createCell = (args: { seq: number; position: Vec2; color: string; content?
   }
 }
 
+export const createDefaultMatheshopBoardSnapshot = (engineSelection: EngineSelectionState): MatheshopBoardSnapshot => {
+  const first = createCell({
+    seq: 1,
+    position: { x: 120, y: 120 },
+    color: '#111111',
+    content: '双击空白处创建单元框\n输入 $$a+b$$ 可渲染公式\nCtrl+Enter 使用 Python 引擎求值',
+  })
+
+  const second = createCell({
+    seq: 2,
+    position: { x: 440, y: 260 },
+    color: '#111111',
+    content: '1+2*3',
+  })
+
+  return {
+    cells: [first, second],
+    edges: [{ id: createId('edge'), from: first.id, to: second.id }],
+    selectedCellId: first.id,
+    editingCellId: null,
+    editingDraft: '',
+    tool: 'text',
+    color: '#111111',
+    linkMode: false,
+    linkFromCellId: null,
+    history: [],
+    engineSelection: { ...engineSelection },
+    statusMessage: 'Matheshop 已切换到 Vue3 + TypeScript core。',
+  }
+}
+
 export class MatheshopBoardCore {
   private snapshot: MatheshopBoardSnapshot
   private readonly listeners = new Set<MatheshopBoardListener>()
   private nextSeq = 1
 
-  constructor() {
-    const first = createCell({
-      seq: this.nextSeq,
-      position: { x: 120, y: 120 },
-      color: '#111111',
-      content: '双击空白处创建单元框\n输入 $$a+b$$ 可渲染公式\nCtrl+Enter 使用 Python 引擎求值',
-    })
-    this.nextSeq += 1
-
-    const second = createCell({
-      seq: this.nextSeq,
-      position: { x: 440, y: 260 },
-      color: '#111111',
-      content: '1+2*3',
-    })
-    this.nextSeq += 1
-
-    this.snapshot = {
-      cells: [first, second],
-      edges: [{ id: createId('edge'), from: first.id, to: second.id }],
-      selectedCellId: first.id,
-      editingCellId: null,
-      editingDraft: '',
-      tool: 'text',
-      color: '#111111',
-      linkMode: false,
-      linkFromCellId: null,
-      history: [],
-      engineSelection: this.loadInitialEngineSelection(),
-      statusMessage: 'Matheshop 已切换到 Vue3 + TypeScript core。',
-    }
+  constructor(options: CreateMatheshopBoardCoreOptions = {}) {
+    this.snapshot = options.initialSnapshot
+      ? cloneSnapshot(options.initialSnapshot)
+      : createDefaultMatheshopBoardSnapshot(this.loadInitialEngineSelection())
+    this.nextSeq = Math.max(0, ...this.snapshot.cells.map((cell) => cell.seq)) + 1
   }
 
   getSnapshot(): MatheshopBoardSnapshot {
@@ -332,4 +341,4 @@ export class MatheshopBoardCore {
   }
 }
 
-export const createMatheshopBoardCore = () => new MatheshopBoardCore()
+export const createMatheshopBoardCore = (options: CreateMatheshopBoardCoreOptions = {}) => new MatheshopBoardCore(options)

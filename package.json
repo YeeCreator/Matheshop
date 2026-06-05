@@ -7,9 +7,9 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "dev:deps": "concurrently -k --raw -n VIEWPORT,UI,APP \"pnpm -C ../viewport-2d-kit dev\" \"pnpm -C ../main-ui dev\" \"pnpm dev\"",
+    "dev:deps": "concurrently -k --raw -n FGKVIEW,VIEWPORT,UI,APP \"pnpm -C ../flow-graph-kit/frontend/flow-graph-kit-vue dev\" \"pnpm -C ../viewport-2d-kit dev\" \"pnpm -C ../main-ui dev\" \"pnpm dev\"",
     "build": "pnpm build:deps && tsc -b && vite build",
-    "build:deps": "pnpm -C ../main-ui build && pnpm -C ../viewport-2d-kit build",
+    "build:deps": "pnpm -C ../main-ui build && pnpm -C ../viewport-2d-kit build && pnpm -C ../flow-graph-kit/frontend/flow-graph-kit-vue build",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
@@ -17,6 +17,7 @@
     "desktop:dist": "pnpm build:deps && set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder"
   },
   "dependencies": {
+    "flow-graph-kit-vue": "link:../flow-graph-kit/frontend/flow-graph-kit-vue",
     "katex": "^0.16.27",
     "main-ui": "link:../main-ui",
     "vue": "^3.5.0",

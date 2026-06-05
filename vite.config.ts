@@ -13,6 +13,7 @@ export default defineConfig({
       'main-ui/styles.css': path.resolve(__dirname, '../main-ui/src/vue/styles/main-ui.css'),
       'main-ui/core': path.resolve(__dirname, '../main-ui/src/core/index.ts'),
       'main-ui/vue': path.resolve(__dirname, '../main-ui/src/vue/index.ts'),
+      'flow-graph-kit-vue': path.resolve(__dirname, '../flow-graph-kit/frontend/flow-graph-kit-vue/src/index.ts'),
       'viewport-2d-kit/core': path.resolve(__dirname, '../viewport-2d-kit/src/core/index.ts'),
       'viewport-2d-kit/vue': path.resolve(__dirname, '../viewport-2d-kit/src/vue/index.ts'),
     },

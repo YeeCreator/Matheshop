@@ -6,6 +6,12 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "flow-graph-kit-vue": [
+        "../flow-graph-kit/frontend/flow-graph-kit-vue/src/index.ts"
+      ]
+    },
 
     /* Bundler mode */
     "moduleResolution": "bundler",

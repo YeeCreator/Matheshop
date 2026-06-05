@@ -30,11 +30,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, shallowRef } from 'vue'
 import { MATHESHOP_PYTHON_ENGINE_ENV, MATHESHOP_PYTHON_ENGINE_ROOT } from '../core/pythonEngineConfig'
-import { matheshopBoard } from '../core/workbench'
-import type { MatheshopBoardSnapshot } from '../core/boardCore'
-import type { EngineChoice } from '../engine/engineSelection'
+import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
+import { loadEngineSelection, type EngineChoice, type EngineSelectionState } from '../engine/engineSelection'
 
-const snapshot = shallowRef<MatheshopBoardSnapshot>(matheshopBoard.getSnapshot())
+const snapshot = shallowRef<EngineSelectionState>(loadEngineSelection())
 let unsubscribe: (() => void) | null = null
 
 const engineChoices: Array<{ value: EngineChoice; label: string }> = [
@@ -47,13 +46,14 @@ const pythonEngineEnv = MATHESHOP_PYTHON_ENGINE_ENV
 const pythonEngineRoot = MATHESHOP_PYTHON_ENGINE_ROOT
 
 const setEngine = (choice: EngineChoice) => {
-  matheshopBoard.setEngineChoice(choice)
+  matheshopWhiteboardFiles.applyEngineChoiceToAll(choice)
 }
 
 onMounted(() => {
-  unsubscribe = matheshopBoard.subscribe((next) => {
-    snapshot.value = next
+  unsubscribe = matheshopWhiteboardFiles.subscribe(() => {
+    snapshot.value = loadEngineSelection()
   })
+  snapshot.value = loadEngineSelection()
 })
 
 onBeforeUnmount(() => {
