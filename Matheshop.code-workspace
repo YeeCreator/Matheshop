@@ -22,7 +22,12 @@
 		},
 		{
 			"path": "../MathSymbolicComputationEngine"
+		},
+		{
+			"path": "../flow-graph-kit"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"git.enabled": false
+	}
 }
