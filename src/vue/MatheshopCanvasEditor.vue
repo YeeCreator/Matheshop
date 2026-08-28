@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
 import type { EditorRenderContext } from 'main-ui/core'
+import { useWorkbench } from 'main-ui/vue'
 import type { Viewport2DCamera } from 'viewport-2d-kit/core'
 import type { ViewportHostBridge } from 'viewport-2d-kit/vue'
 import { FlowGraphEditorSurface } from 'flow-graph-kit-vue'
@@ -98,8 +99,10 @@ import type { MatheshopBoardCore, MatheshopBoardSnapshot } from '../core/boardCo
 import type { MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
 import { createMatheshopGraphEditorDocument } from '../adapters/flowGraphKitAdapter'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
+import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
 
 const props = defineProps<{ context: EditorRenderContext }>()
+const { document } = useWorkbench()
 
 const resolveWhiteboardFileId = (context: EditorRenderContext) => {
   const fileId = context.editor.payload?.whiteboardFileId
@@ -242,11 +245,39 @@ const onEditorKeydown = (event: KeyboardEvent) => {
 
 const onGlobalKeydown = (event: KeyboardEvent) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
-  if (event.key === 'Delete' || event.key === 'Backspace') {
-    activeBoard.value.deleteSelected()
+  if (event.key === 'Escape') {
+    activeBoard.value.cancelEditing()
   }
-  if (event.key.toLowerCase() === 'l') {
-    activeBoard.value.toggleLinkMode()
+}
+
+/** 判断当前激活的 editor 是否为本实例，避免多个白板标签页同时响应全局命令。 */
+const isActiveEditor = () => {
+  const workspace = document.value.workspaceStates[document.value.activeWorkspaceId]
+  if (!workspace) return false
+  const group = workspace.layout.groups[workspace.layout.activeGroupId ?? '']
+  const activeTabId = group?.activeTabId
+  if (!activeTabId) return false
+  const activeTab = workspace.tabs[activeTabId]
+  return activeTab?.editorInstanceId === props.context.editor.id
+}
+
+/** 消费 main-ui command 体系广播的画布命令，本地不再自行监听快捷键。 */
+const onBoardCommandEvent = (event: Event) => {
+  if (!isActiveEditor()) return
+  const command = (event as CustomEvent<MatheshopBoardCommandDetail>).detail?.command
+  switch (command) {
+    case 'clear':
+      clearBoard()
+      break
+    case 'toggleLinkMode':
+      toggleLinkMode()
+      break
+    case 'deleteSelected':
+      deleteSelected()
+      break
+    case 'evaluate':
+      evaluateSelected()
+      break
   }
 }
 
@@ -262,6 +293,7 @@ const evaluateSelected = () => void activeBoard.value.evaluateSelected()
 onMounted(() => {
   connectBoard(resolveWhiteboardFileId(props.context))
   window.addEventListener('keydown', onGlobalKeydown)
+  window.addEventListener(MATHESHOP_BOARD_COMMAND_EVENT, onBoardCommandEvent)
 })
 
 watch(
@@ -274,6 +306,7 @@ watch(
 onBeforeUnmount(() => {
   unsubscribe?.()
   window.removeEventListener('keydown', onGlobalKeydown)
+  window.removeEventListener(MATHESHOP_BOARD_COMMAND_EVENT, onBoardCommandEvent)
   window.removeEventListener('pointermove', onWindowPointerMove)
 })
 </script>
