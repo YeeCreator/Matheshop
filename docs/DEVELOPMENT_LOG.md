@@ -2,6 +2,23 @@
 
 > 规则：每次新增功能/改动/修复错误，在校验与完工时把变动追加到本日志，并同步更新相关开发者文档/用户文档/README（如适用）。
 
+## 2026-08-24
+
+### 适配：升级到 main-ui 0.1.0，接入 settings / command / keybinding 体系
+
+- 新增 `src/core/settingsPersistence.ts`：提供 `createMatheshopSettingsPersistenceAdapter`，用 localStorage 持久化 main-ui 的 `SettingsSnapshot`（main-ui 只内置内存适配器，宿主需自备持久层）。
+- `src/core/workbench.ts`：
+  - `createMatheshopMainUiRuntime` 注入 `settingsPersistence`。
+  - 新增 `MATHESHOP_ENGINE_CHOICE_SETTING_ID` 与 `MATHESHOP_ENGINE_CHOICES`，把计算引擎选择注册为 schema setting（enum），默认值取自旧 `matheshop:engineSelection:v1` 以便平滑迁移。
+  - 新增 `registerEngineChoiceSetting`：监听 `runtime.core.settings.subscribe`，引擎选择变化时同步回 `matheshopWhiteboardFiles.applyEngineChoiceToAll`，使 settings 成为引擎选择的权威来源。
+  - 新增 `registerBoardCommands`：注册 `清空画布`/`切换连线模式`/`删除选中`/`求值` 四个命令与对应快捷键（`Ctrl+Shift+K`、`L`、`Delete`、`Backspace`），命令入口通过 `MATHESHOP_BOARD_COMMAND_EVENT` 广播意图。
+- 新增 `src/core/boardCommands.ts`：定义画布命令事件名、`MatheshopBoardCommand` 与 `MatheshopBoardCommandDetail` 约定，命令层与画布 renderer 解耦。
+- `src/vue/MatheshopSettingsEditor.vue`：用 main-ui 的 `SettingsEditor` 替换手写引擎单选按钮，删除对 `engineSelection` 本地快照的直接读写，改为由 settings 统一管理。
+- `src/vue/MatheshopCanvasEditor.vue`：
+  - 通过 `useWorkbench` 判断当前激活 editor 是否为本实例（`isActiveEditor`），仅激活标签页响应全局命令，避免多白板标签页同时清空/删除。
+  - 用 `onBoardCommandEvent` 消费 `MATHESHOP_BOARD_COMMAND_EVENT`，移除 Delete/Backspace/L 的本地全局键盘监听（改由 main-ui keybinding 体系承接），Escape 取消编辑仍保留为编辑器局部行为。
+- 校验：`tsc -b` 无 matheshop 自身错误；`vite build` 通过。
+
 ## 2026-05-14
 
 ### 架构迁移：全栈切换到 Vue3 + TypeScript core

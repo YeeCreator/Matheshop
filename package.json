@@ -19,7 +19,7 @@
   "dependencies": {
     "flow-graph-kit-vue": "link:../flow-graph-kit/frontend/flow-graph-kit-vue",
     "katex": "^0.16.27",
-    "main-ui": "link:../main-ui",
+    "main-ui": "workspace:^0.1.1",
     "vue": "^3.5.0",
     "viewport-2d-kit": "link:../viewport-2d-kit"
   },

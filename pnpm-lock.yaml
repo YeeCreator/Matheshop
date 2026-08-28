@@ -15,7 +15,7 @@ importers:
         specifier: ^0.16.27
         version: 0.16.27
       main-ui:
-        specifier: link:../main-ui
+        specifier: workspace:^0.1.1
         version: link:../main-ui
       viewport-2d-kit:
         specifier: link:../viewport-2d-kit

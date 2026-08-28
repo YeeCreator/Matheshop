@@ -5,6 +5,9 @@ import MatheshopAnalysisEditor from '../vue/MatheshopAnalysisEditor.vue'
 import MatheshopFilesEditor from '../vue/MatheshopFilesEditor.vue'
 import MatheshopSettingsEditor from '../vue/MatheshopSettingsEditor.vue'
 import { matheshopWhiteboardFiles } from './whiteboardFiles'
+import { createMatheshopSettingsPersistenceAdapter } from './settingsPersistence'
+import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommand } from './boardCommands'
+import { loadEngineSelection, type EngineChoice } from '../engine/engineSelection'
 
 export const MATHESHOP_CANVAS_WORKSPACE_ID = 'matheshop.workspace.canvas'
 export const MATHESHOP_FILES_WORKSPACE_ID = 'matheshop.workspace.files'
@@ -18,6 +21,15 @@ export const MATHESHOP_FILES_RENDERER_KEY = 'matheshop.renderer.files'
 export const MATHESHOP_ANALYSIS_RENDERER_KEY = 'matheshop.renderer.analysis'
 export const MATHESHOP_SETTINGS_RENDERER_KEY = 'matheshop.renderer.settings'
 export const MATHESHOP_CANVAS_GROUP_ID = 'matheshop-group-main'
+
+export const MATHESHOP_ENGINE_CHOICE_SETTING_ID = 'matheshop.engineChoice'
+
+/** 供 setting schema 与设置面板共用的引擎选项清单。 */
+export const MATHESHOP_ENGINE_CHOICES: Array<{ value: EngineChoice; label: string }> = [
+  { value: 'builtin_python', label: '内置 Python 高性能计算后台' },
+  { value: 'builtin_native', label: '浏览器 TypeScript 轻量后备' },
+  { value: 'external', label: '外接计算引擎占位' },
+]
 
 const bootstrapWhiteboard = matheshopWhiteboardFiles.ensureBootstrapFile()
 
@@ -129,8 +141,15 @@ const analysisWorkspace: WorkspaceDescriptor = {
   allowUserReset: true,
 }
 
+const isEngineChoice = (value: unknown): value is EngineChoice => {
+  return value === 'builtin_python' || value === 'builtin_native' || value === 'external'
+}
+
 export const createMatheshopMainUiRuntime = () => {
-  const runtime = createMainUiRuntime({ activeWorkspaceId: MATHESHOP_CANVAS_WORKSPACE_ID })
+  const runtime = createMainUiRuntime({
+    activeWorkspaceId: MATHESHOP_CANVAS_WORKSPACE_ID,
+    settingsPersistence: createMatheshopSettingsPersistenceAdapter(),
+  })
   runtime.core.registerEditor(canvasEditor)
   runtime.core.registerEditor(filesEditor)
   runtime.core.registerEditor(analysisEditor)
@@ -146,7 +165,72 @@ export const createMatheshopMainUiRuntime = () => {
   runtime.vue.registerEditorRenderer(MATHESHOP_FILES_RENDERER_KEY, filesRenderer)
   runtime.vue.registerEditorRenderer(MATHESHOP_ANALYSIS_RENDERER_KEY, analysisRenderer)
   runtime.vue.registerEditorRenderer(MATHESHOP_SETTINGS_RENDERER_KEY, settingsRenderer)
+
+  registerEngineChoiceSetting(runtime)
+  registerBoardCommands(runtime)
   return runtime
+}
+
+/** 把计算引擎选择注册为 main-ui schema setting，并用 settings 作为统一持久化入口。 */
+const registerEngineChoiceSetting = (runtime: ReturnType<typeof createMainUiRuntime>) => {
+  runtime.core.registerSettingSchema({
+    id: MATHESHOP_ENGINE_CHOICE_SETTING_ID,
+    title: '计算引擎',
+    description: '选择计算白板的默认求值引擎。',
+    category: 'engine',
+    type: 'enum',
+    defaultValue: loadEngineSelection().choice,
+    enumValues: MATHESHOP_ENGINE_CHOICES.map((item) => ({ value: item.value, label: item.label })),
+  })
+
+  // settings 是权威来源：一旦引擎选择通过设置面板变化，就同步回业务层。
+  runtime.core.settings.subscribe((change) => {
+    if (change.id === MATHESHOP_ENGINE_CHOICE_SETTING_ID && isEngineChoice(change.value)) {
+      matheshopWhiteboardFiles.applyEngineChoiceToAll(change.value)
+    }
+  })
+}
+
+/** 注册画布命令与快捷键，把画布操作收敛进 main-ui 的 command 体系。 */
+const registerBoardCommands = (runtime: ReturnType<typeof createMainUiRuntime>) => {
+  const dispatchBoardCommand = (command: MatheshopBoardCommand) => {
+    window.dispatchEvent(new CustomEvent(MATHESHOP_BOARD_COMMAND_EVENT, { detail: { command } }))
+  }
+  const inCanvasWorkspace = (context: { workspaceId: string }) => context.workspaceId === MATHESHOP_CANVAS_WORKSPACE_ID
+
+  runtime.core.registerCommand({
+    id: 'matheshop.canvas.clear',
+    title: '清空画布',
+    category: 'Matheshop',
+    when: inCanvasWorkspace,
+    run: () => dispatchBoardCommand('clear'),
+  })
+  runtime.core.registerCommand({
+    id: 'matheshop.canvas.toggleLinkMode',
+    title: '切换连线模式',
+    category: 'Matheshop',
+    when: inCanvasWorkspace,
+    run: () => dispatchBoardCommand('toggleLinkMode'),
+  })
+  runtime.core.registerCommand({
+    id: 'matheshop.canvas.deleteSelected',
+    title: '删除选中单元框',
+    category: 'Matheshop',
+    when: inCanvasWorkspace,
+    run: () => dispatchBoardCommand('deleteSelected'),
+  })
+  runtime.core.registerCommand({
+    id: 'matheshop.canvas.evaluate',
+    title: '求值选中单元框',
+    category: 'Matheshop',
+    when: inCanvasWorkspace,
+    run: () => dispatchBoardCommand('evaluate'),
+  })
+
+  runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.clear', keybinding: 'Ctrl+Shift+K' })
+  runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.toggleLinkMode', keybinding: 'L' })
+  runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.deleteSelected', keybinding: 'Delete' })
+  runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.deleteSelected', keybinding: 'Backspace' })
 }
 
 export const matheshopRuntime = createMatheshopMainUiRuntime()
