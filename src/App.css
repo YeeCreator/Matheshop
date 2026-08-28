@@ -1,635 +1,326 @@
-/* 应用级样式（替换 Vite 模板默认样式，避免影响三栏布局） */
+.matheshop-side-content h2,
+.matheshop-settings h2,
+.matheshop-settings h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
 
-/* 画布区域 */
-.canvas-shell {
+.matheshop-side-content p,
+.matheshop-settings p {
+  margin: 0 0 12px;
+  color: var(--main-ui-text-muted);
+}
+
+.matheshop-side-content dl,
+.matheshop-settings dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0 0 14px;
+}
+
+.matheshop-side-content dt,
+.matheshop-settings dt {
+  color: var(--main-ui-text-muted);
+}
+
+.matheshop-side-content dd,
+.matheshop-settings dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.matheshop-tool-button,
+.matheshop-side-content button {
   width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  min-height: 28px;
+  border: 1px solid var(--main-ui-border);
+  border-radius: var(--main-ui-radius);
+  background: var(--main-ui-panel-muted);
+  color: var(--main-ui-text);
+  cursor: pointer;
 }
 
-.canvas-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.canvas-wrap {
-  flex: 1;
-  min-height: 300px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-
-  /* 关键：画板区域独立滚动（类似 draw.io/Obsidian Canvas） */
-  overflow: auto;
-  position: relative;
-
-  /* 防止滚动链传递到页面 */
-  overscroll-behavior: contain;
-  overflow-anchor: none;
-
-  /* 轻微网格/纸张感（不影响 canvas 绘制，纯视觉） */
-  background-image:
-    radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: 0 0;
-}
-
-/* 工作区里承载 canvas 的“巨大内容层”，让滚动条出现 */
-.canvas-workspace {
-  position: relative;
-  width: 8000px;
-  height: 8000px;
-}
-
-.canvas {
-  width: 100%;
-  height: 100%;
+.matheshop-tool-button {
   display: block;
-  touch-action: none;
-  cursor: crosshair;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
+  margin-bottom: 8px;
+  text-align: left;
+  padding: 0 8px;
 }
 
-.canvas:active {
-  cursor: grabbing;
+.matheshop-tool-button.is-active {
+  border-color: var(--main-ui-accent);
+  color: var(--main-ui-accent-strong);
+  background: rgba(0, 95, 184, 0.1);
 }
 
-.small-muted {
-  font-size: 12px;
-  color: #666;
-}
-
-.history-textbox {
-  width: 100%;
-  min-height: 180px;
-  box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.4;
-  background: #fff;
-  color: #222;
-  resize: none;
-}
-
-.math-right-sidebar-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* LaTeX / 公式层 */
-.formula-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.formula-item {
-  position: absolute;
-  transform: translate(0, 0);
-  transform-origin: left top;
-  will-change: transform, left, top;
-  color: #111;
-  pointer-events: auto;
-  cursor: move;
-  border-radius: 6px;
-  padding: 2px 4px;
-}
-
-.formula-item.is-selected {
-  outline: 2px solid rgba(33, 150, 243, 0.9);
-  background: rgba(33, 150, 243, 0.06);
-}
-
-/* 编辑器浮层 */
-.latex-editor {
-  position: absolute;
-  z-index: 10;
-  pointer-events: auto;
-  min-width: 280px;
-  max-width: min(560px, 90%);
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
-  padding: 10px;
-}
-
-.latex-editor-row {
-  display: flex;
-  gap: 8px;
-}
-
-.latex-editor-input {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.latex-editor-actions {
-  display: flex;
+.matheshop-color-field {
+  display: grid;
+  grid-template-columns: 1fr 40px;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
+  margin: 12px 0;
+  color: var(--main-ui-text-muted);
 }
 
-.latex-editor-hint {
-  margin-left: auto;
-  font-size: 12px;
-  color: #666;
+.matheshop-color-field input {
+  width: 40px;
+  height: 28px;
+  padding: 0;
 }
 
-.latex-editor-preview {
-  margin-top: 10px;
-  padding: 10px;
-  border-top: 1px dashed #e0e0e0;
-  color: #111;
+.matheshop-toolbar-status {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: var(--main-ui-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.latex-editor-preview-empty {
-  font-size: 12px;
-  color: #999;
+.matheshop-viewport-host {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
 }
 
-/* Cell / 单元框层 */
-.cell-layer {
+.matheshop-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background-image: radial-gradient(rgba(31, 35, 40, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.matheshop-edge-layer {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
-  z-index: 2;
-}
-
-.cell {
-  position: absolute;
-  pointer-events: auto;
-
-  /* 隐式化：默认看起来像“内容直接在画布上” */
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  box-shadow: none;
-
-  /*
-    重要：不要用 overflow:hidden。
-    实测在 grid 居中 + 动态尺寸时，渲染内容（尤其是 token view / KaTeX）可能被裁剪到不可见。
-    内部需要滚动的，交给 .cell-blocks 自己的 overflow 处理。
-  */
   overflow: visible;
-
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    box-shadow 120ms ease;
 }
 
-/* 可选：hover 时给一点点存在感（不想要可删） */
-.cell:hover {
-  border-color: rgba(0, 0, 0, 0.10);
-  background: rgba(255, 255, 255, 0.35);
+.matheshop-edge {
+  fill: none;
+  stroke: var(--main-ui-accent);
+  stroke-width: 2;
 }
 
-.cell.is-selected {
-  /* 选中时才“浮起来” */
-  outline: 2px solid rgba(33, 150, 243, 0.85);
-  border-color: rgba(0, 0, 0, 0.10);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.10);
+.matheshop-cell {
+  position: absolute;
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+  border: 1px solid var(--main-ui-border);
+  border-radius: 6px;
+  background: var(--main-ui-panel);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  overflow: visible;
+  cursor: move;
 }
 
-.cell.is-drop-hint {
-  outline: 2px dashed rgba(244, 67, 54, 0.9);
-  border-color: rgba(244, 67, 54, 0.25);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 0 0 3px rgba(244, 67, 54, 0.10),
-    0 10px 26px rgba(0, 0, 0, 0.10);
+.matheshop-cell.is-selected {
+  outline: 2px solid var(--main-ui-accent);
 }
 
-.cell-header {
-  height: 28px;
+.matheshop-cell.is-link-source {
+  outline: 2px dashed var(--main-ui-accent);
+}
+
+.matheshop-cell__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--main-ui-border);
+  color: var(--main-ui-text-muted);
+  background: var(--main-ui-panel-muted);
   font-size: 12px;
-  color: #555;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.03), rgba(0,0,0,0.01));
-  border-bottom: 1px solid rgba(0,0,0,0.06);
-  cursor: move;
+  -webkit-user-select: none;
   user-select: none;
 }
 
-.cell-body {
-  padding: 8px 10px;
-  height: calc(100% - 28px);
-  box-sizing: border-box;
-
-  /* 内容容器整体居中（水平+垂直） */
-  display: grid;
-  place-items: center;
-}
-
-/* 编辑态：textarea 本身无法做到“光标/首行”垂直居中，这里实现的是编辑框在节点中垂直居中 */
-.cell-editor-wrap {
-  width: 100%;
-  height: 100%;
+.matheshop-cell__content {
   min-width: 0;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 渲染态内容容器：居中时仍允许滚动，避免 grid item 最小尺寸撑爆 */
-.cell-blocks,
-.expr-token-view {
-  max-width: 100%;
-  max-height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.cell-blocks {
-  width: 100%;
-  height: 100%;
   overflow: auto;
+  padding: 10px;
+  cursor: default;
 }
 
-.cell-editor {
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  border: 1px solid #cfcfcf;
-  border-radius: 8px;
+.matheshop-cell__editor {
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  margin: 8px;
+  border: 1px solid var(--main-ui-border);
+  border-radius: 4px;
   padding: 8px;
+  resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
-  line-height: 1.45;
-  resize: none;
-
-  /* 编辑态：水平居中 */
-  text-align: center;
+  line-height: 1.5;
 }
 
-.cell-add {
-  border: 1px solid rgba(0,0,0,0.15);
-  background: rgba(255,255,255,0.85);
-  color: #333;
-  border-radius: 6px;
-  width: 22px;
-  height: 20px;
-  line-height: 18px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.cell-add:hover {
-  background: rgba(255,255,255,1);
-}
-
-.canvas-drop-hud {
+.matheshop-cell__resize {
   position: absolute;
-  left: 10px;
-  top: 10px;
-  z-index: 20;
-  pointer-events: none;
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.68);
-  color: rgba(255, 255, 255, 0.95);
-  font-size: 12px;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--main-ui-panel);
+  border-radius: 3px;
+  background: var(--main-ui-accent);
+  cursor: se-resize;
 }
 
-.cell-blocks {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-}
-
-.cell-block-text {
+.matheshop-cell-block--text {
   white-space: pre-wrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
-  line-height: 1.45;
-  color: #222;
+  line-height: 1.5;
 }
 
-.cell-block-latex {
-  margin-top: 6px;
-  margin-bottom: 6px;
-  color: #111;
+.matheshop-cell-block--latex {
+  margin: 6px 0;
 }
 
-.cell-block-ref {
-  margin-top: 6px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px dashed rgba(0,0,0,0.18);
-  background: rgba(0,0,0,0.03);
-  font-size: 12px;
-}
-
-.cell-block-error {
-  margin-top: 6px;
-  color: #c00;
-  font-size: 12px;
-}
-
-.cell-collapse {
-  border: 1px solid rgba(0,0,0,0.15);
-  background: rgba(255,255,255,0.85);
-  color: #333;
-  border-radius: 6px;
-  width: 22px;
-  height: 20px;
-  line-height: 18px;
-  text-align: center;
-  cursor: pointer;
-  margin-right: 6px;
-}
-
-.cell-collapse:hover {
-  background: rgba(255,255,255,1);
-}
-
-/* 连线 SVG 层 */
-.edge-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.edge-path {
-  fill: none;
-  stroke: rgba(0, 0, 0, 0.35);
-  stroke-width: 2px;
-  pointer-events: stroke;
-  cursor: pointer;
-}
-
-.edge-path.is-selected {
-  stroke: rgba(33, 150, 243, 0.95);
-  stroke-width: 3px;
-}
-
-.edge-path-preview {
-  stroke: rgba(33, 150, 243, 0.65);
-  stroke-dasharray: 6 6;
-}
-
-/* 让节点层在连线之上 */
-.cell-layer {
-  z-index: 2;
-}
-
-.formula-layer {
-  z-index: 3;
-}
-
-/* 节点缩放手柄（draw.io 风格最小版：右下角） */
-.cell-resize-handle {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  transform: translate(-50%, -50%);
-  border-radius: 3px;
-  background: rgba(33, 150, 243, 0.95);
-  border: 2px solid rgba(255, 255, 255, 0.98);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
-  cursor: se-resize;
-  pointer-events: auto;
-  z-index: 6;
-}
-
-/* 就地编辑框与 Inspector 样式 */
-.inline-expr-editor {
-  position: absolute;
-  z-index: 12;
-  pointer-events: auto;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #d0d0d0;
-  border-radius: 10px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
-  padding: 8px;
-  min-width: 200px;
-}
-
-.inline-expr-editor-input {
+.matheshop-history {
   width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  padding: 6px 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-}
-
-.inline-expr-editor-actions {
-  margin-top: 6px;
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.inspector-row {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.inspector-k {
-  font-size: 12px;
-  color: #666;
-}
-
-.inspector-v {
-  font-size: 12px;
-  color: #111;
-  word-break: break-all;
-}
-
-.inspector-label {
-  display: grid;
-  gap: 6px;
-  font-size: 12px;
-  color: #333;
-  margin-top: 10px;
-}
-
-.inspector-textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  min-height: 160px;
+  border: 1px solid var(--main-ui-border);
+  border-radius: var(--main-ui-radius);
   padding: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.4;
   resize: vertical;
-}
-
-.inspector-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.inspector-error {
-  margin-top: 8px;
-  padding: 8px;
-  border-radius: 8px;
-  background: rgba(244, 67, 54, 0.08);
-  border: 1px solid rgba(244, 67, 54, 0.25);
-  color: #b00020;
+  background: var(--main-ui-panel-muted);
+  color: var(--main-ui-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
 }
 
-.inspector-tokens {
-  margin-top: 8px;
-  display: grid;
-  gap: 4px;
-}
-
-.inspector-token {
-  display: grid;
-  grid-template-columns: 30px 1fr;
-  gap: 8px;
-  align-items: center;
-}
-
-.inspector-token-i {
-  font-size: 12px;
-  color: #999;
-}
-
-/* 设置面板样式 */
-.settings-gear {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 1000;
-
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.92);
-  color: #111;
-  cursor: pointer;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
-}
-
-.settings-gear:hover {
-  background: rgba(255, 255, 255, 1);
-}
-
-/* 独立设置页（覆盖主界面） */
-.settings-page {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgba(255, 255, 255, 0.96);
+.matheshop-settings {
+  height: 100%;
+  padding: 18px;
   overflow: auto;
-  padding: 16px;
+  background: var(--main-ui-panel);
+  color: var(--main-ui-text);
 }
 
-.settings-overlay {
-  /* 保留旧类名避免潜在引用，但不再作为默认 UI */
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgba(0, 0, 0, 0.18);
+.matheshop-settings__header {
+  margin-bottom: 16px;
 }
 
-.settings-panel {
-  /* 从“右上角浮层”变成“页面内容容器” */
-  position: relative;
-  top: auto;
-  right: auto;
-  width: min(720px, calc(100vw - 32px));
-  max-width: 100%;
-  max-height: none;
-  overflow: visible;
-  margin: 0 auto;
+.matheshop-settings__group {
+  border-top: 1px solid var(--main-ui-border);
+  padding-top: 14px;
+  margin-top: 14px;
 }
 
-.settings-header {
+.matheshop-files,
+.matheshop-analysis {
+  height: 100%;
+  padding: 18px;
+  overflow: auto;
+  background: var(--main-ui-panel);
+  color: var(--main-ui-text);
+}
+
+.matheshop-files__header,
+.matheshop-analysis__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.matheshop-files__list,
+.matheshop-analysis__list {
   display: grid;
-  grid-template-columns: 30px 1fr 30px;
-  align-items: center;
   gap: 12px;
 }
 
-.settings-back {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
+.matheshop-files__card,
+.matheshop-analysis__card {
+  border: 1px solid var(--main-ui-border);
+  border-radius: var(--main-ui-radius);
+  padding: 12px;
+  background: var(--main-ui-panel-muted);
 }
 
-.settings-back:hover {
-  background: rgba(255, 255, 255, 1);
-}
-
-.settings-close {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.settings-close:hover {
-  background: rgba(255, 255, 255, 1);
-}
-
-.settings-section {
-  margin-top: 12px;
-}
-
-/* token 渲染态：在 cell-body 的 grid 居中布局下，给一个稳定的盒子尺寸 */
-.expr-token-view {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-
-  /* 让 token 内容在容器内居中 */
+.matheshop-files__meta,
+.matheshop-files__actions {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  /* 多行时允许换行 */
-  white-space: pre-wrap;
+.matheshop-files__meta {
+  margin-bottom: 10px;
+}
+
+.matheshop-files__meta span,
+.matheshop-analysis__card p {
+  color: var(--main-ui-text-muted);
+  margin: 0;
+}
+
+.matheshop-files__actions button {
+  width: auto;
+  min-width: 112px;
+  padding: 0 10px;
+}
+
+.matheshop-analysis__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.matheshop-analysis__stat {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--main-ui-border);
+  border-radius: var(--main-ui-radius);
+  padding: 14px;
+  background: var(--main-ui-panel-muted);
+}
+
+.matheshop-analysis__stat strong {
+  font-size: 20px;
+}
+
+.matheshop-analysis__stat span {
+  color: var(--main-ui-text-muted);
+}
+
+.matheshop-analysis__card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.matheshop-analysis__card dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 10px;
+  margin: 0;
+}
+
+.matheshop-analysis__card dt {
+  color: var(--main-ui-text-muted);
+}
+
+.matheshop-analysis__card dd {
+  margin: 0;
+}
+
+.matheshop-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
 }

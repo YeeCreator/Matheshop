@@ -7,7 +7,7 @@ export type EngineSelectionState = {
 const LS_KEY = 'matheshop:engineSelection:v1'
 
 export const DEFAULT_ENGINE_SELECTION: EngineSelectionState = {
-  choice: 'builtin_native',
+  choice: 'builtin_python',
 }
 
 export function loadEngineSelection(): EngineSelectionState {

@@ -1,98 +1,63 @@
 # 产品用户手册（User Manual）- Matheshop
 
-> 面向：使用者/体验者。
-> 
-> 说明：Matheshop 当前是原型项目，功能以画布交互、公式渲染与基础求值为主。
+Matheshop 是一个数学白板原型，用于在二维画布上创建单元框、渲染公式、连接推导关系，并调用计算引擎求值。
 
-## 1. 这是什么？
+## 1. 启动
 
-Matheshop 是一个轻量的数学白板（Canvas）应用。你可以：
-
-- 在画布上创建可编辑的单元框（Cell）
-- 输入文本与公式（KaTeX 渲染）
-- 在单元框之间连线组织推导关系
-- 对表达式进行求值（取决于选择的计算引擎）
-
-## 2. 启动与打开
-
-### 2.1 本地运行（开发版）
-
-仓库使用 pnpm 管理依赖。
+开发运行：
 
 ```powershell
 pnpm install
 pnpm dev
 ```
 
-启动后按终端提示打开本地地址（通常为 `http://localhost:5173`）。
+构建预览：
 
-### 2.2（可选）启动 Python 计算引擎
+```powershell
+pnpm build
+pnpm preview --host 127.0.0.1 --port 4173
+```
 
-如果你希望使用“内置 Python 引擎”求值，需要先启动本地 HTTP 服务：
+## 2. Python 计算后台
+
+如果使用默认的“内置 Python 高性能计算后台”，先启动服务：
 
 ```powershell
 cd engine\SymbolicComputationEngineServer
-.\Start-Server.ps1 -Port 8000
+uv venv --python 3.13
+uv pip install --python .\.venv\Scripts\python.exe --index-url https://pypi.org/simple -r requirements.txt
+$env:MATHSYMCALC_ENGINE_ROOT = 'C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine'
+$env:PORT = 8000
+.\.venv\Scripts\python.exe -m matheshop_engine_server
 ```
 
-然后在前端里把引擎切换到“Python”。
+## 3. 画布操作
 
-### 2.3 演示：在画布里做一次“求值”
+- 双击空白处：创建单元框。
+- 单击单元框：选中。
+- 双击单元框：进入编辑。
+- 拖动单元框标题区域：移动。
+- 拖动右下角手柄：调整大小。
+- 点击“连线”：进入或退出连线模式。
+- 连线模式下依次点击两个单元框：创建连线。
+- Delete 或 Backspace：删除选中的单元框。
 
-> 说明：当前原型里，“符号计算/求值”的演示入口是 **Cell 的求值输出**。
+## 4. 编辑与公式
 
-步骤：
+- Enter：提交编辑。
+- Shift + Enter：换行。
+- Esc：取消编辑。
+- Ctrl/Command + Enter：提交并求值。
+- 使用 `$$...$$` 输入 LaTeX 公式块，例如 `$$a+b$$`。
 
-1) 在画布空白处 **单击** 创建一个 cell
-2) **双击** cell 进入编辑
-3) 输入一个算术表达式，例如：`1+2*(3^2)`
-4) 按 **Ctrl/⌘ + Enter**：提交并触发求值
+求值成功时，单元框会追加 `= ...` 输出行；失败时会追加错误提示。
 
-结果：
+## 5. 设置
 
-- 成功时：cell 会追加一行输出，例如 `= 19`
-- 失败时：cell 会追加一行警告，例如 `⚠ <错误信息>`
+点击活动栏或状态栏的齿轮按钮可打开设置弹窗。
 
-> 提示：如果你选择的是 Python 引擎但后端未启动，通常会看到 `fetch failed` 或 `HTTP 5xx/4xx` 之类的错误信息。
+当前引擎选项：
 
-## 3. 画布基本操作
-
-### 3.1 缩放与平移
-
-- 滚轮：缩放（范围：8% ~ 6400%）
-- Shift + 滚轮：横向平移
-- 中键拖拽：平移
-- 空格按住 + 左键拖拽：平移
-
-> 提示：Ctrl/⌘ + 滚轮不会触发浏览器“页面缩放”，会被应用当做画布缩放。
-
-### 3.2 选择与取消
-
-- 单击：选中 cell / 公式 / 连线（取决于当前位置）
-- Esc：取消当前交互（如拖拽/连线起点/选区等）
-
-## 4. Cell（单元框）使用说明
-
-### 4.1 编辑文本
-
-- 双击 cell 进入编辑
-- Enter：提交并退出编辑（立即渲染内容）
-- Shift + Enter：换行
-- Esc：退出编辑（取消/回退以当前实现为准）
-
-### 4.2 求值（Evaluation）
-
-编辑 cell 时：
-
-- Ctrl/⌘ + Enter：提交并求值（结果会追加显示为 `= ...`）
-
-> 说明：求值结果与语法支持取决于你选择的引擎（见设置页）。
-
-### 4.3 token 选中（表达式细粒度交互）
-
-当 cell 内容可被表达式解析器识别时：
-
-- 单击某个 token：高亮选中
-- 双击 token：弹出局部编辑框（如项目已启用该能力）
-
-如果解析失败，cell 会回退到普通渲染。
+- 内置 Python 高性能计算后台：默认选项，通过 FastAPI 服务调用外部 `MathSymbolicComputationEngine`。
+- 浏览器 TypeScript 轻量后备：用于没有 Python 服务时的前端后备。
+- 外接计算引擎占位：保留给后续外部服务接入。
