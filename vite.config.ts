@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -7,12 +7,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [vue()],
   resolve: {
     alias: {
-      // 在开发时直接将包名映射到源码目录以获得更好的 HMR 体验
-      'main-ui': path.resolve(__dirname, '../main-ui/src'),
-      'viewport-kit': path.resolve(__dirname, '../viewport-2d-kit/src'),
+      'main-ui/styles.css': path.resolve(__dirname, '../main-ui/src/vue/styles/main-ui.css'),
+      'main-ui/core': path.resolve(__dirname, '../main-ui/src/core/index.ts'),
+      'main-ui/vue': path.resolve(__dirname, '../main-ui/src/vue/index.ts'),
+      'flow-graph-kit-vue': path.resolve(__dirname, '../flow-graph-kit/frontend/flow-graph-kit-vue/src/index.ts'),
+      'viewport-2d-kit/core': path.resolve(__dirname, '../viewport-2d-kit/src/core/index.ts'),
+      'viewport-2d-kit/vue': path.resolve(__dirname, '../viewport-2d-kit/src/vue/index.ts'),
     },
   },
   server: {
@@ -20,8 +23,6 @@ export default defineConfig({
     fs: {
       allow: [
         path.resolve(__dirname, '..'),
-        path.resolve(__dirname, '../main-ui'),
-        path.resolve(__dirname, '../viewport-2d-kit'),
       ],
     },
     proxy: {

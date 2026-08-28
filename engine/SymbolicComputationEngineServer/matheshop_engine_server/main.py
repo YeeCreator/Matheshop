@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict
@@ -9,7 +10,24 @@ from typing import Any, Dict
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from engine.SymbolicComputationEngine.symcalc import eval_text
+DEFAULT_ENGINE_ROOT = Path(os.environ.get(
+    "MATHSYMCALC_ENGINE_ROOT",
+    "C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine",
+)).resolve()
+
+if DEFAULT_ENGINE_ROOT.exists():
+    sys.path.insert(0, str(DEFAULT_ENGINE_ROOT))
+
+from mathsymcalc.symbolic_engine import SymbolicEngine
+
+
+def eval_text(text: str) -> float:
+    """使用外部 MathSymbolicComputationEngine 对纯数值表达式求值。"""
+
+    engine = SymbolicEngine(prewarm_lexicon=False)
+    expr = engine.parse(text)
+    simplified = engine.simplify(expr)
+    return float(engine.evaluate(simplified, {}))
 
 
 def _setup_file_logging() -> None:
@@ -55,7 +73,7 @@ class EvalResponseErr(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "engineRoot": str(DEFAULT_ENGINE_ROOT)}
 
 
 @app.post("/v1/eval", response_model=EvalResponseOk | EvalResponseErr)

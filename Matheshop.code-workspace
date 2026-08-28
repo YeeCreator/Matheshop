@@ -5,21 +5,29 @@
 			"path": "."
 		},
 		{
-			"name": "main-ui-react",
-			"path": "../main-ui-react"
+			"name": "main-ui",
+			"path": "../main-ui"
 		},
 		{
-			"name": "viewport-2d-kit-react",
-			"path": "../viewport-2d-kit-react"
+			"name": "viewport-2d-kit",
+			"path": "../viewport-2d-kit"
 		},
 		{
 			"name": "Engs：Matheshop",
-			"path": "../../../iCloudDrive/iCloud~md~obsidian/Engs_notebook/Projects/Matheshop"
+			"path": "../Engs_notebook/Projects/Matheshop"
 		},
 		{
-			"name": "CS：数学符号计算",
-			"path": "../../../iCloudDrive/iCloud~md~obsidian/ES_notebook/Projects/数学符号计算"
+			"name": "ES：数学符号计算",
+			"path": "../ES_notebook/Projects/数学符号计算"
+		},
+		{
+			"path": "../MathSymbolicComputationEngine"
+		},
+		{
+			"path": "../flow-graph-kit"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"git.enabled": false
+	}
 }

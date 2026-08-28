@@ -2,19 +2,59 @@
 
 > 规则：每次新增功能/改动/修复错误，在校验与完工时把变动追加到本日志，并同步更新相关开发者文档/用户文档/README（如适用）。
 
+## 2026-08-24
+
+### 适配：升级到 main-ui 0.1.0，接入 settings / command / keybinding 体系
+
+- 新增 `src/core/settingsPersistence.ts`：提供 `createMatheshopSettingsPersistenceAdapter`，用 localStorage 持久化 main-ui 的 `SettingsSnapshot`（main-ui 只内置内存适配器，宿主需自备持久层）。
+- `src/core/workbench.ts`：
+  - `createMatheshopMainUiRuntime` 注入 `settingsPersistence`。
+  - 新增 `MATHESHOP_ENGINE_CHOICE_SETTING_ID` 与 `MATHESHOP_ENGINE_CHOICES`，把计算引擎选择注册为 schema setting（enum），默认值取自旧 `matheshop:engineSelection:v1` 以便平滑迁移。
+  - 新增 `registerEngineChoiceSetting`：监听 `runtime.core.settings.subscribe`，引擎选择变化时同步回 `matheshopWhiteboardFiles.applyEngineChoiceToAll`，使 settings 成为引擎选择的权威来源。
+  - 新增 `registerBoardCommands`：注册 `清空画布`/`切换连线模式`/`删除选中`/`求值` 四个命令与对应快捷键（`Ctrl+Shift+K`、`L`、`Delete`、`Backspace`），命令入口通过 `MATHESHOP_BOARD_COMMAND_EVENT` 广播意图。
+- 新增 `src/core/boardCommands.ts`：定义画布命令事件名、`MatheshopBoardCommand` 与 `MatheshopBoardCommandDetail` 约定，命令层与画布 renderer 解耦。
+- `src/vue/MatheshopSettingsEditor.vue`：用 main-ui 的 `SettingsEditor` 替换手写引擎单选按钮，删除对 `engineSelection` 本地快照的直接读写，改为由 settings 统一管理。
+- `src/vue/MatheshopCanvasEditor.vue`：
+  - 通过 `useWorkbench` 判断当前激活 editor 是否为本实例（`isActiveEditor`），仅激活标签页响应全局命令，避免多白板标签页同时清空/删除。
+  - 用 `onBoardCommandEvent` 消费 `MATHESHOP_BOARD_COMMAND_EVENT`，移除 Delete/Backspace/L 的本地全局键盘监听（改由 main-ui keybinding 体系承接），Escape 取消编辑仍保留为编辑器局部行为。
+- 校验：`tsc -b` 无 matheshop 自身错误；`vite build` 通过。
+
+## 2026-05-14
+
+### 架构迁移：全栈切换到 Vue3 + TypeScript core
+
+- 移除旧 React 编译入口与历史 React 组件树，入口统一为 `src/main.ts` + `src/App.vue`。
+- 使用 `main-ui/vue` 提供工作台壳层，注册 Matheshop 画布 editor 与设置 editor。
+- 使用 `viewport-2d-kit/vue` 和 `viewport-2d-kit/core` 统一处理二维视口渲染与 screen/world 坐标换算。
+- 新增 `src/core/` 作为框架无关 TypeScript core，负责画布快照、Cell/Edge、编辑、移动、缩放、连线与求值。
+- 新增 `src/vue/` 渲染层，Vue 组件只订阅 core 快照并转发用户事件。
+- 前端默认计算引擎改为 `builtin_python`，后端服务通过 `MATHSYMCALC_ENGINE_ROOT` 对接外部 `C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`。
+- 移除 Python 服务 requirements 中对外部引擎的 editable 安装要求，改为运行时路径注入，避免外部 flat-layout 仓库被 setuptools 自动发现阻塞安装。
+- 刷新 `package.json` 与 `pnpm-lock.yaml`：保留 `vue`、`main-ui`、`viewport-2d-kit`、`katex`，移除旧 React/Radix/TanStack 等直接依赖。
+- 校验：`pnpm build` 通过；生产预览 `http://127.0.0.1:4173/` 显示 `main-ui Vue3 workbench` 与 Vue 画布；Python 服务入口调用 `eval_text('1+2*3')` 返回 `7.0`。
+
+## 2026-05-02
+
+### 修复：同步 main-ui 独立拆分后的宿主接入口径
+
+- 移除运行代码对旧 React 壳层包导出的依赖，新增 `src/managed/workbench-shell/reactLayout.tsx` 作为 Matheshop 宿主侧 React 过渡壳层。
+- 将视口依赖与源码导入统一为 `viewport-2d-kit`，不再使用旧视口包别名。
+- 刷新 `package.json` 与 `pnpm-lock.yaml`，补齐 `main-ui`、`viewport-2d-kit`、`vue` 与 `@vitejs/plugin-vue` 依赖。
+- 校验：`pnpm lint`、`pnpm build`、`pnpm test` 通过；内置浏览器确认首屏渲染出工具栏、画布与 Inspector。
+
 ## 2026-03-05
 
-### 坐标迁移：相关适配工具全量迁移到 `viewport-2d-kit-react`
+### 坐标迁移：相关适配工具全量迁移到 `viewport-2d-kit`
 
-- 将 `matheshop` 本地的坐标与相机适配实现迁移到 `viewport-2d-kit-react`：
-  - 新增 `viewport-2d-kit-react/src/coordinateAdapters.ts`
-  - 在 `viewport-2d-kit-react/src/index.ts` 统一导出 `clientToLocalCssPoint/localCssToWorld/worldToLocalCssWithScroll/camera2DToLegacy/legacyToCamera2D/getDprScaleFromCanvas` 等函数。
+- 将 `matheshop` 本地的坐标与相机适配实现迁移到 `viewport-2d-kit`：
+  - 新增 `viewport-2d-kit/src/coordinateAdapters.ts`
+  - 在 `viewport-2d-kit/src/index.ts` 统一导出 `clientToLocalCssPoint/localCssToWorld/worldToLocalCssWithScroll/camera2DToLegacy/legacyToCamera2D/getDprScaleFromCanvas` 等函数。
 - `matheshop` 侧改造：
-  - `CanvasBoard.tsx`、`CanvasCellLayer.tsx`、`CanvasCell.tsx`、`CanvasCellPorts.tsx`、`CanvasCellResizeHandle.tsx`、`FormulaLayer.tsx`、`EdgeLayer.tsx` 全部切换为从 `viewport-kit` 导入坐标与适配工具。
+  - `CanvasBoard.tsx`、`CanvasCellLayer.tsx`、`CanvasCell.tsx`、`CanvasCellPorts.tsx`、`CanvasCellResizeHandle.tsx`、`FormulaLayer.tsx`、`EdgeLayer.tsx` 全部切换为从 `viewport-2d-kit` 导入坐标与适配工具。
   - 删除本地重复实现：`src/components/canvas/utils/viewportCoords.ts`、`src/components/canvas/utils/viewportKitAdapter.ts`。
   - `src/components/canvas/utils/geometry.ts` 精简为仅保留 `clamp` 与 `resizeCanvasToDisplaySize`。
 - 兼容性与验证：
-  - `pnpm run predev` 通过（含 `viewport-2d-kit-react` 与 `main-ui-react` 构建 + 依赖刷新）。
+  - `pnpm run predev` 通过（含 `viewport-2d-kit` 与宿主侧过渡壳层依赖刷新）。
   - `pnpm build` 通过。
   - `pnpm run dev:with-dependent` 可启动并成功拉起 Vite（`http://localhost:5173/`）。
 
@@ -225,21 +265,21 @@
 
 ## 2026-02-04
 
-- 主界面 UI 壳迁移：`matheshop` 开始直接复用工作区本地包 `main-ui-react`（`MatchFrame` + `Toolbar`），替换原有的顶部工具条与左右侧栏布局实现。
+- 主界面 UI 壳迁移：`matheshop` 开始复用工作区本地 UI 壳层（`MatchFrame` + `Toolbar`），替换原有的顶部工具条与左右侧栏布局实现。
 - 约束：中间 2D 视口 `CanvasBoard` 组件与其事件/数据流保持不变，仅调整外层承载结构。
-- 工程：在 `matheshop/package.json` 增加 `"main-ui-react": "file:../main-ui-react"` 依赖。
+- 工程：在 `matheshop/package.json` 增加本地 UI 壳层依赖。
 
 ## 2026-02-04（补充）
 
-- 主界面 UI 进一步收敛到 `main-ui-react`：
-  - `main-ui-react/MatchFrame` 侧栏容器支持 `padding/background/bordered` 参数化，侧栏外观不再依赖 `matheshop/styles.css` 的 `.sidebar`。
-  - `main-ui-react/Panel` 提供统一的面板（分组块）外观，`matheshop` 右侧栏的 Inspector/图层/历史以 `Panel` 组织。
+- 主界面 UI 进一步收敛到宿主侧布局壳层：
+  - `MatchFrame` 侧栏容器支持 `padding/background/bordered` 参数化，侧栏外观不再依赖 `matheshop/styles.css` 的 `.sidebar`。
+  - `Panel` 提供统一的面板（分组块）外观，`matheshop` 右侧栏的 Inspector/图层/历史以 `Panel` 组织。
 
 ## 2026-02-05
 
-- 重构：视口/相机系统迁移到本地第三方工具包 `viewport-2d-kit-react`（包名 `viewport-kit`）。
+- 重构：视口/相机系统迁移到本地第三方工具包 `viewport-2d-kit`。
   - `CanvasBoard.tsx` 使用 `useViewportCamera()` 作为权威相机来源。
-  - 通过 `src/components/canvas/utils/viewportKitAdapter.ts` 保持与 legacy `Camera{x,y,zoom}` 的兼容，确保 `EdgeLayer/CanvasCellLayer/FormulaLayer` 行为不变。
+  - 通过通用坐标适配工具保持与 legacy `Camera{x,y,zoom}` 的兼容，确保 `EdgeLayer/CanvasCellLayer/FormulaLayer` 行为不变。
   - wheel 平移、Ctrl/⌘+wheel 缩放（光标锚点）、pinch 缩放等行为保持与迁移前一致。
 
 ## 2026-03-05
@@ -248,5 +288,5 @@
 
 - 现象：当画布中没有任何节点时，执行平移/缩放会看到业务节点参考缺失，且网格看起来不跟随视口变化，易误判为视口失效。
 - 根因：`src/components/CanvasBoard.tsx` 的网格可见范围计算使用了 workspace/canvas 尺寸语义，和当前可视口（`wrap`）不一致，导致网格绘制锚定范围与实际观察窗口脱节。
-- 修复：网格仍保持在 world 空间绘制，不迁移到 `viewport-kit`；仅将 `getVisibleWorldBox` 的尺寸输入改为 `wrap.getBoundingClientRect()`，保证网格按当前可视口计算并随 camera 变化。
+- 修复：网格仍保持在 world 空间绘制，不迁移到 `viewport-2d-kit` 的独立绘制层；仅将 `getVisibleWorldBox` 的尺寸输入改为 `wrap.getBoundingClientRect()`，保证网格按当前可视口计算并随 camera 变化。
 - 验证：执行 `pnpm -C C:\Users\Ethan\CoreFiles\ProjectsFile\matheshop build` 通过（`tsc -b && vite build`），无编译错误。
