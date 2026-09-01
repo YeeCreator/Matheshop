@@ -8,24 +8,22 @@
       <button type="button" @click="createAndOpenFile">新建白板</button>
     </header>
 
-    <div class="matheshop-files__list">
-      <article v-for="file in files" :key="file.id" class="matheshop-files__card">
-        <div class="matheshop-files__meta">
-          <strong>{{ file.title }}</strong>
-          <span>{{ formatDate(file.updatedAt) }}</span>
-        </div>
-        <div class="matheshop-files__actions">
-          <button type="button" @click="openFile(file.id)">打开到白板</button>
-          <button type="button" @click="renameFile(file.id, file.title)">重命名</button>
-        </div>
-      </article>
-    </div>
+    <TableView
+      :columns="fileColumns"
+      :rows="fileRows"
+      :editable="false"
+      row-key="id"
+      :selected-row-id="null"
+      :row-height="28"
+      @row-select="onRowSelect"
+    />
   </section>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
 import { useWorkbench } from 'main-ui/vue'
+import { TableView, type TableColumn, type TableRow } from '@main-ui/view-table'
 import { MATHESHOP_CANVAS_EDITOR_KIND, MATHESHOP_CANVAS_GROUP_ID, MATHESHOP_CANVAS_WORKSPACE_ID } from '../core/workbench'
 import { matheshopWhiteboardFiles, type MatheshopWhiteboardFileSummary } from '../core/whiteboardFiles'
 
@@ -34,6 +32,28 @@ const files = shallowRef<MatheshopWhiteboardFileSummary[]>(matheshopWhiteboardFi
 let unsubscribe: (() => void) | null = null
 
 const formatDate = (value: string) => new Date(value).toLocaleString()
+
+/** view-table 列定义。 */
+const fileColumns: TableColumn[] = [
+  { key: 'title', title: '名称', sortable: true },
+  { key: 'updatedAt', title: '最近更新', width: 200, sortable: true },
+  { key: 'createdAt', title: '创建时间', width: 200, sortable: true },
+]
+
+/** 把文件摘要映射为 view-table 行数据。 */
+const fileRows = computed<TableRow[]>(() =>
+  files.value.map((file) => ({
+    id: file.id,
+    title: file.title,
+    updatedAt: formatDate(file.updatedAt),
+    createdAt: formatDate(file.createdAt),
+  })),
+)
+
+/** 双击行打开白板文件。 */
+const onRowSelect = (rowId: string) => {
+  openFile(rowId)
+}
 
 const activateExistingTab = async (fileId: string): Promise<boolean> => {
   const canvasWorkspace = document.value.workspaceStates[MATHESHOP_CANVAS_WORKSPACE_ID]

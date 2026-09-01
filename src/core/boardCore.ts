@@ -224,6 +224,14 @@ export class MatheshopBoardCore {
     })
   }
 
+  setCellColor(cellId: CellId, color: string): void {
+    this.setSnapshot({
+      ...this.snapshot,
+      cells: this.snapshot.cells.map((cell) => (cell.id === cellId ? { ...cell, color } : cell)),
+      selectedCellId: cellId,
+    })
+  }
+
   deleteSelected(): void {
     const id = this.snapshot.selectedCellId
     if (!id) return

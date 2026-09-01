@@ -130,3 +130,7 @@
 - 引擎路由：src/engine/engineClient.ts、src/engine/pythonEngineClient.ts
 - 类型定义：src/components/cellTypes.ts
 - 桌面端入口：electron/main.cjs、electron/preload.cjs
+
+## main-ui 驻场联络
+
+本项目正在接受 main-ui 项目组驻场联络。详见根目录 `AGENTS.md` 与 `docs/main-ui-liaison/`。

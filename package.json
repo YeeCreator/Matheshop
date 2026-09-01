@@ -17,9 +17,14 @@
     "desktop:dist": "pnpm build:deps && set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder"
   },
   "dependencies": {
+    "@main-ui/core": "workspace:*",
+    "@main-ui/view-console": "workspace:*",
+    "@main-ui/view-inspector": "workspace:*",
+    "@main-ui/view-table": "workspace:*",
+    "@main-ui/view-2d": "workspace:*",
     "flow-graph-kit-vue": "link:../flow-graph-kit/frontend/flow-graph-kit-vue",
     "katex": "^0.16.27",
-    "main-ui": "workspace:^0.1.1",
+    "main-ui": "workspace:^0.6.0",
     "vue": "^3.5.0",
     "viewport-2d-kit": "link:../viewport-2d-kit"
   },

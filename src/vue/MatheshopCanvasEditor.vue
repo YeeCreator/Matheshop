@@ -67,21 +67,21 @@
       <div class="matheshop-side-content">
         <h2>Inspector</h2>
         <template v-if="selectedCell">
-          <p>单元框 #{{ selectedCell.seq }}</p>
-          <dl>
-            <dt>位置</dt>
-            <dd>{{ Math.round(selectedCell.position.x) }}, {{ Math.round(selectedCell.position.y) }}</dd>
-            <dt>尺寸</dt>
-            <dd>{{ Math.round(selectedCell.size.w) }} x {{ Math.round(selectedCell.size.h) }}</dd>
-            <dt>引擎</dt>
-            <dd>{{ snapshot.engineSelection.choice }}</dd>
-          </dl>
+          <InspectorView
+            :schema="inspectorSchema"
+            :values="inspectorValues"
+            @change="onInspectorChange"
+          />
           <button type="button" @click="deleteSelected">删除选中</button>
         </template>
         <p v-else>未选中单元框。</p>
 
         <h2>历史记录</h2>
-        <textarea class="matheshop-history" readonly :value="historyText" />
+        <ConsoleView
+          :entries="historyEntries"
+          :clear-enabled="false"
+          :row-height="20"
+        />
       </div>
     </template>
   </FlowGraphEditorSurface>
@@ -91,6 +91,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
 import type { EditorRenderContext } from 'main-ui/core'
 import { useWorkbench } from 'main-ui/vue'
+import { InspectorView, type InspectorSchema, type InspectorChangePayload } from '@main-ui/view-inspector'
+import { ConsoleView, type ConsoleEntry } from '@main-ui/view-console'
 import type { Viewport2DCamera } from 'viewport-2d-kit/core'
 import type { ViewportHostBridge } from 'viewport-2d-kit/vue'
 import { FlowGraphEditorSurface } from 'flow-graph-kit-vue'
@@ -100,6 +102,7 @@ import type { MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
 import { createMatheshopGraphEditorDocument } from '../adapters/flowGraphKitAdapter'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
+import { MATHESHOP_ENGINE_CHOICES } from '../core/workbench'
 
 const props = defineProps<{ context: EditorRenderContext }>()
 const { document } = useWorkbench()
@@ -120,6 +123,68 @@ let resizeState: null | { id: string; startClient: Vec2; startSize: { w: number;
 
 const selectedCell = computed(() => snapshot.value.cells.find((cell) => cell.id === snapshot.value.selectedCellId) ?? null)
 const historyText = computed(() => snapshot.value.history.length === 0 ? '暂无' : snapshot.value.history.map((entry) => entry.label).join('\n'))
+
+/** 把白板历史映射为 view-console 条目（FR-452 配套）。 */
+const historyEntries = computed<ConsoleEntry[]>(() =>
+  [...snapshot.value.history].reverse().map((entry) => ({
+    id: entry.id,
+    level: 'info',
+    message: entry.label,
+    timestamp: new Date(entry.createdAt).getTime(),
+  })),
+)
+
+/** view-inspector schema：单元框属性检视字段（FR-452）。 */
+const inspectorSchema: InspectorSchema = [
+  { kind: 'number', key: 'seq', label: '序号', min: 1, step: 1 },
+  { kind: 'number', key: 'posX', label: '位置 X', step: 1 },
+  { kind: 'number', key: 'posY', label: '位置 Y', step: 1 },
+  { kind: 'number', key: 'sizeW', label: '宽度', min: 120, step: 1 },
+  { kind: 'number', key: 'sizeH', label: '高度', min: 80, step: 1 },
+  { kind: 'string', key: 'color', label: '颜色' },
+  { kind: 'select', key: 'engine', label: '引擎', options: MATHESHOP_ENGINE_CHOICES.map((c) => ({ value: c.value, label: c.label })) },
+]
+
+/** 从选中单元框派生 Inspector 受控值表。 */
+const inspectorValues = computed(() => {
+  const cell = selectedCell.value
+  if (!cell) return null
+  return {
+    seq: cell.seq,
+    posX: Math.round(cell.position.x),
+    posY: Math.round(cell.position.y),
+    sizeW: Math.round(cell.size.w),
+    sizeH: Math.round(cell.size.h),
+    color: cell.color,
+    engine: snapshot.value.engineSelection.choice,
+  }
+})
+
+/** 消费 Inspector 变更意图，路由到 boardCore 对应变更方法。 */
+const onInspectorChange = ({ key, value }: InspectorChangePayload) => {
+  const cell = selectedCell.value
+  if (!cell) return
+  switch (key) {
+    case 'posX':
+      activeBoard.value.moveCell(cell.id, { x: value as number, y: cell.position.y })
+      break
+    case 'posY':
+      activeBoard.value.moveCell(cell.id, { x: cell.position.x, y: value as number })
+      break
+    case 'sizeW':
+      activeBoard.value.resizeCell(cell.id, { w: value as number, h: cell.size.h })
+      break
+    case 'sizeH':
+      activeBoard.value.resizeCell(cell.id, { w: cell.size.w, h: value as number })
+      break
+    case 'color':
+      activeBoard.value.setCellColor(cell.id, value as string)
+      break
+    case 'engine':
+      activeBoard.value.setEngineChoice(value as typeof snapshot.value.engineSelection.choice)
+      break
+  }
+}
 
 const connectBoard = (fileId: string) => {
   unsubscribe?.()
