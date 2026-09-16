@@ -5,7 +5,9 @@
 ## 8. 风险与开放问题
 
 - M4：导入/导出、更多引擎能力
+  - 双轨重构补注：导入/导出需对接 MathEngine 后端 API（`mathengine/ir` 序列化，剥离 D2 排版）；内嵌引擎（engine/SymbolicComputationEngine、engine/engine_ts）退役，求值请求转发到 MathEngine
 - M3：AST 子树级别替换 + 自动补括号
+  - 双轨重构补注：AST 子树替换需对接 Math-IR 的占位符 id 回填机制（D4 冻结），而非纯 tokenRange 文本替换，避免冻结子式内部被误改写；见 DEVELOPER_GUIDE 第 8 节前端纪律
 - M2：局部编辑框 + Inspector 联动
 - M1：token 级别渲染与选中
 - M0：画布交互 + cell/formula/edge MVP

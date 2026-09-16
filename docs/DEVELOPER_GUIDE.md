@@ -110,3 +110,13 @@ pnpm lint
 - 首屏出现 `main-ui Vue3 workbench`。
 - 画布中出现 Vue 渲染的 cell，Inspector 中显示 `builtin_python`。
 - 设置弹窗显示 `MATHSYMCALC_ENGINE_ROOT` 和外部 Python 引擎路径。
+
+## 8. 前端纪律：与 MathEngine 后端的边界
+
+双轨重构后，matheshop 前端与 MathEngine 后端遵循以下纪律（规范源见学术轨 `ES_notebook/Projects/数学引擎/探索：符号计算与形式证明.md` 与工程轨 `Engs_notebook/Projects/Matheshop/设计：数学引擎.md`）：
+
+- **只消费 Presentation-AST 子集**：前端求值调用只传递 Presentation-AST 层数据（cell.content + frozen 标记 + 占位符 id），绝不传递或触碰 E-graph 内部结构、Term-Graph 共享节点或 Math-IR 计算层对象。前端是视图层，不是计算层。
+- **冻结 UI 对接占位符 id 机制**：圈选子式冻结时，前端在 Presentation-AST 节点打 frozen 标记并分配唯一占位符 id；下发计算时冻结子式以占位符 id 屏蔽，不展开内部结构；计算回填时按 id 恢复原始子式。冻结标记只存在于视图层与元层，导出 LaTeX 时不泄露（区别于 Mathematica 的 Hold）。
+- **内嵌引擎退役方向**：`engine/SymbolicComputationEngine/`（Python）与 `engine/engine_ts/`（TS）标记为 deprecated，迁移方向为调用 MathEngine 后端 API（`mathengine/symbolic` 重写 + `mathengine/proof` 校验）。`engine/SymbolicComputationEngineServer/` 保留为过渡期适配壳，逐步把求值请求转发到 MathEngine。退役不在本次重构执行，只标注方向。
+- **Lean 校验异步旁路**：前端触发等式校验时，走 MathEngine 的 ProofVerifier 通道（VerifyRequest/VerifyResult），校验失败给出警告但不阻断推导交互，不在前端等待 Lean 核验完成。
+- **AST 子树替换对接占位符回填**：PRD M3（AST 子树级替换）需对接 Math-IR 的占位符 id 回填机制，而非纯 tokenRange 文本替换，避免冻结子式内部被误改写。
