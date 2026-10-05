@@ -1,72 +1,46 @@
-# Matheshop 工作区引导
+# Matheshop 项目引导
 
-> 本文件帮助 AI Agent 快速了解工作区结构，特别适用于移动端无法浏览文件树的场景。
+> 本文件帮助 AI Agent 用最少 token 了解**本项目**自身结构。不含其他项目路径，可安全入库。跨项目关系见联合体索引。
 
-## 工作区概览
+## 项目概览
 
-- **工作区名称**: Matheshop
-- **文件夹数量**: 10
+- **项目名称**: Matheshop
+- **文件夹数量**: 1
 
 ## 文件夹清单
-
-### 💻 代码仓库
-
-#### MathEngine
-- **路径**: `/Users/ethan/CoreFiles/ProjectsFile/MathEngine`
-- **说明**: Python/TypeScript 源码
-
-#### scene-kit
-- **路径**: `/Users/ethan/CoreFiles/ProjectsFile/scene-kit`
-- **说明**: Python/TypeScript 源码
 
 ### 📁 项目
 
 #### matheshop
-- **路径**: `/Users/ethan/CoreFiles/ProjectsFile/matheshop`
+- **路径**: `./`
 - **说明**: 项目文件夹
 
-#### relation-entity-component-system
-- **路径**: `/Users/ethan/CoreFiles/ProjectsFile/relation-entity-component-system`
-- **说明**: 项目文件夹
+## 项目结构速查
 
-#### main-ui
-- **路径**: `/Users/ethan/CoreFiles/ProjectsFile/main-ui`
-- **说明**: 项目文件夹
-
-### 📓 笔记
-
-#### ES 笔记：数学引擎
-- **路径**: `/Users/ethan/Library/Mobile Documents/iCloud~md~obsidian/Documents/ES_notebook/Projects/数学引擎`
-- **说明**: Obsidian 项目笔记，含 notes/、tasks/、archive/ 等
-- **子目录**: docs, memos, notes, projects, tasks, 相关程序, 相关资源, 研究笔记, 论符号计算系统
-
-#### 世界模型理论
-- **路径**: `/Users/ethan/Library/Mobile Documents/iCloud~md~obsidian/Documents/ES_notebook/Projects/世界模型理论`
-- **说明**: Obsidian 项目笔记，含 notes/、tasks/、archive/ 等
-- **子目录**: docs, memos, notes, tasks
-
-### 🛠️ AI Skills
-
-#### skills
-- **路径**: `/Users/ethan/.copilot/skills`
-- **说明**: 用户级 Copilot Skills
-
-### 🤖 AI Agent
-
-#### agents
-- **路径**: `/Users/ethan/.copilot/agents`
-- **说明**: 用户级 Copilot Agents
-
-## 常用入口
-
-### 任务与笔记
-- 每个笔记项目通常包含 `tasks/`（任务）、`notes/`（笔记）、`archive/`（归档）
-- 在对话中说「查看任务」或「打开笔记」，AI 会自动定位
-
-### 代码仓库
-- 源码通常在 `src/`、`autodokit/`、`electron/` 等目录
-- 文档在 `docs/` 目录
+- `docs/`
+- `electron/`
+- `engine/`
+- `public/`
+- `src/`
+- `AGENTS.md`
+- `CLAUDE.md`
+- `README.md`
+- `WORKSPACE_GUIDE.md`
+- `eslint.config.js`
+- `index.html`
+- `main-ui.template.json`
+- `main-ui.template.upgrade-report.json`
+- `package.json`
+- `pnpm-lock.yaml`
+- `pnpm-workspace.yaml`
+- `pyproject.toml`
+- `styles.css`
+- `tsconfig.app.json`
+- `tsconfig.json`
+- `tsconfig.node.json`
+- `uv.lock`
+- `vite.config.ts`
 
 ---
 
-*本文件由 `mlms_kit.aoc.workspace_guides` 自动生成*
+*本文件由 `mlms_kit.aoc.workspace_guides` 自动生成（项目自述版）*
