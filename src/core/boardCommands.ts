@@ -10,7 +10,7 @@
 export const MATHESHOP_BOARD_COMMAND_EVENT = 'matheshop:board-command'
 
 /** 画布命令载荷：命令入口通过该结构把意图广播给当前激活的画布 renderer。 */
-export type MatheshopBoardCommand = 'clear' | 'toggleLinkMode' | 'deleteSelected' | 'evaluate'
+export type MatheshopBoardCommand = 'clear' | 'toggleLinkMode' | 'deleteSelected' | 'evaluate' | 'freezeSelected' | 'processCnl'
 
 /** 命令事件 detail 结构。 */
 export type MatheshopBoardCommandDetail = {

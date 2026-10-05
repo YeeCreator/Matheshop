@@ -41,8 +41,8 @@
 
 **本项目**办公区位于工作区根路径的以下文件夹：
 
-- [MS-docs](../../../iCloudDrive/iCloud~md~obsidian/Engs_notebook/Projects/Matheshop/docs/)。
-- [数学符号计算-docs](../../../iCloudDrive/iCloud~md~obsidian/CS_notebook/Projects/数学符号计算/docs/)。
+- [MS-docs](../../../Mobile%20Documents/iCloud~md~obsidian/Documents/Engs_notebook/Projects/数学工坊/docs/)。
+- [数学引擎-docs](../../../Mobile%20Documents/iCloud~md~obsidian/Documents/ES_notebook/Projects/数学引擎/docs/)。
 
   注意：
 

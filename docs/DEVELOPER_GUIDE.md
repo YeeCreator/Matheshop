@@ -113,10 +113,14 @@ pnpm lint
 
 ## 8. 前端纪律：与 MathEngine 后端的边界
 
-双轨重构后，matheshop 前端与 MathEngine 后端遵循以下纪律（规范源见学术轨 `ES_notebook/Projects/数学引擎/探索：符号计算与形式证明.md` 与工程轨 `Engs_notebook/Projects/Matheshop/设计：数学引擎.md`）：
+双轨重构后，matheshop 前端与 MathEngine 后端遵循以下纪律（规范源见学术轨 `ES_notebook/Projects/数学引擎/notes-探索符号计算与形式证明-20260916-001.md` 与工程轨 `Engs_notebook/Projects/数学工坊/design-数学引擎-20260909-001.md`）：
 
 - **只消费 Presentation-AST 子集**：前端求值调用只传递 Presentation-AST 层数据（cell.content + frozen 标记 + 占位符 id），绝不传递或触碰 E-graph 内部结构、Term-Graph 共享节点或 Math-IR 计算层对象。前端是视图层，不是计算层。
 - **冻结 UI 对接占位符 id 机制**：圈选子式冻结时，前端在 Presentation-AST 节点打 frozen 标记并分配唯一占位符 id；下发计算时冻结子式以占位符 id 屏蔽，不展开内部结构；计算回填时按 id 恢复原始子式。冻结标记只存在于视图层与元层，导出 LaTeX 时不泄露（区别于 Mathematica 的 Hold）。
 - **内嵌引擎退役方向**：`engine/SymbolicComputationEngine/`（Python）与 `engine/engine_ts/`（TS）标记为 deprecated，迁移方向为调用 MathEngine 后端 API（`mathengine/symbolic` 重写 + `mathengine/proof` 校验）。`engine/SymbolicComputationEngineServer/` 保留为过渡期适配壳，逐步把求值请求转发到 MathEngine。退役不在本次重构执行，只标注方向。
 - **Lean 校验异步旁路**：前端触发等式校验时，走 MathEngine 的 ProofVerifier 通道（VerifyRequest/VerifyResult），校验失败给出警告但不阻断推导交互，不在前端等待 Lean 核验完成。
 - **AST 子树替换对接占位符回填**：PRD M3（AST 子树级替换）需对接 Math-IR 的占位符 id 回填机制，而非纯 tokenRange 文本替换，避免冻结子式内部被误改写。
+- **自然语言输入走后端猜想模块**：前端若提供受控自然语言（CNL）输入入口，文法解析与校验永远在后端（GF/猜想模块），前端不做文法校验、不做符号化；前端只渲染后端返回的候选 IR，并按 D6 推导状态（raw/rewritten/proven/conjecture）视觉区分猜想与已验证公式。规范源见工程轨 `Engs_notebook/Projects/数学工坊/design-数学引擎-20260909-001.md` 第 11 节「自然语言符号化接口」。
+- **CNL 白板画布形态由 matheshop 承接**：受控自然语言的“白板画布”前端形态即 matheshop 本身，复用既有栈（flow-graph-kit-vue + viewport-2d-kit + main-ui），不引入 tldraw；CNL 文本卡片对应 Cell，逻辑连线对应 Edge。
+- **手写与自由批注不进对象层**：手写笔迹、自由自然语言批注只作视图层批注，永不进入 IR 对象层、不参与推理（对象层/元层分离）。
+- **源码为唯一真相**：富文本笔记本、画布节点、公式编辑器的任何视图操作最终回写原始源码（等价 cell.content），保存与下发后端的一律是原始源码而非渲染结果。

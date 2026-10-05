@@ -31,6 +31,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/engine/, ''),
       },
+      // MathEngine 统一后端 service（自然语言符号化接口 /process、/eval、/verify）
+      '/api/mathengine': {
+        target: 'http://127.0.0.1:8010',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/mathengine/, ''),
+      },
     },
   },
 })

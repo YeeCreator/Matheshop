@@ -4,6 +4,23 @@ Matheshop 是一个基于 **Vue3 + TypeScript core** 的数学白板原型。界
 
 后台计算默认对接外部 Python 高性能符号计算包：`C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`。
 
+## 双轨定位与命名消歧
+
+数学引擎（ME）分**工程轨**与**学术轨**两轨，任何会话请先据此定位，勿混用名称与路径：
+
+| 轨道 | 代码仓库 | 笔记目录（磁盘实际名） |
+|---|---|---|
+| 工程轨·前端 | `ProjectsFile/matheshop`（本仓库） | `Engs_notebook/Projects/数学工坊` |
+| 工程轨·后端 | `ProjectsFile/MathEngine` | `Engs_notebook/Projects/数学工坊`（统一工程笔记：前端+后端） |
+| 学术轨·研究 | `EntelechySystem/EntelechySystem/MathEngineResearch`（宿主 `ProjectsFile/EntelechySystem`） | `ES_notebook/Projects/数学引擎` |
+
+命名消歧（易混点）：
+
+- `MathEngine` = 工程后端**仓库**；`数学引擎` = 跨轨**概念**，同时也是学术**笔记目录名**。
+- `matheshop` = 前端**仓库**；其工程笔记在 **`数学工坊` 目录**（早期文档误记 `Matheshop`，磁盘无该目录）。
+- IR 规范所有权归学术轨（`ES_notebook/Projects/数学引擎/notes-探索符号计算与形式证明-20260916-001.md`）；工程轨实现六维子集（D1–D4 + D5-lite + D6-lite）。
+- 权威导航与规则以各仓库根目录 `AGENTS.md` 为唯一真相源（`CLAUDE.md`/`.github/copilot-instructions.md` 为转发壳）。
+
 ## 当前能力
 
 - `main-ui` 工作台：活动栏、标签组、状态栏、设置弹窗由 `main-ui/vue` 提供。

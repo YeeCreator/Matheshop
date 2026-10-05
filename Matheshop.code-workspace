@@ -5,29 +5,78 @@
 			"path": "."
 		},
 		{
+			"name": "Engs 笔记：数学工坊",
+			"path": "../Engs_notebook/Projects/数学工坊"
+		},
+		{
+			"name": "MathEngine",
+			"path": "../MathEngine"
+		},
+		{
+			"name": "ES 笔记：数学引擎",
+			"path": "../ES_notebook/Projects/数学引擎"
+		},
+		{
+			"name": "relation-entity-component-system",
+			"path": "../relation-entity-component-system"
+		},
+		{
+			"name": "scene-kit",
+			"path": "../scene-kit"
+		},
+		{
+			"name": "世界模型理论",
+			"path": "../ES_notebook/Projects/世界模型理论"
+		},
+		{
 			"name": "main-ui",
 			"path": "../main-ui"
 		},
 		{
-			"name": "viewport-2d-kit",
-			"path": "../viewport-2d-kit"
+			"name": "agents",
+			"path": "../../../.copilot/agents"
 		},
 		{
-			"name": "Engs：Matheshop",
-			"path": "../Engs_notebook/Projects/Matheshop"
-		},
-		{
-			"name": "ES：数学符号计算",
-			"path": "../ES_notebook/Projects/数学符号计算"
-		},
-		{
-			"path": "../MathSymbolicComputationEngine"
-		},
-		{
-			"path": "../flow-graph-kit"
+			"name": "skills",
+			"path": "../../../.copilot/skills"
 		}
 	],
 	"settings": {
-		"git.enabled": false
+		"git.enabled": false,
+		"window.autoDetectColorScheme": true,
+"workbench.colorCustomizations": {
+			// 亮色模式：黄色系 → 浅黄
+			"MacOS Modern Light - Ventura Xcode Default": {
+				"editor.background": "#ffffdc",
+				"editor.foreground": "#2b2a1e",
+				"editorCursor.foreground": "#b8860b",
+				"editorLineNumber.foreground": "#8b846b",
+				"editor.selectionBackground": "#fff8cd"
+			},
+			// 暗色模式：黄色系 → 深黄褐
+			"MacOS Modern Dark - Ventura Xcode Default": {
+				"editor.background": "#2b2a1e",
+				"editor.foreground": "#f6f4ea",
+				"editorCursor.foreground": "#ffd54d",
+				"editorLineNumber.foreground": "#b5b09a",
+				"editor.selectionBackground": "#594d00"
+			},
+			// 兼容内置主题：黄色系（亮色）
+			"Light 2026": {
+				"editor.background": "#ffffdc",
+				"editor.foreground": "#2b2a1e",
+				"editorCursor.foreground": "#b8860b",
+				"editorLineNumber.foreground": "#8b846b",
+				"editor.selectionBackground": "#fff8cd"
+			},
+			// 兼容内置主题：黄色系（暗色）
+			"Dark 2026": {
+				"editor.background": "#2b2a1e",
+				"editor.foreground": "#f6f4ea",
+				"editorCursor.foreground": "#ffd54d",
+				"editorLineNumber.foreground": "#b5b09a",
+				"editor.selectionBackground": "#594d00"
+			}
+		}
 	}
 }

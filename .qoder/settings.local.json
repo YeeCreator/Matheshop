@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/ethan/CoreFiles/ProjectsFile/MathEngine -maxdepth 2 -type f \\\\\\( -name \"*.md\" -o -name \"*.py\" \\\\\\) | head -60)",
+      "Bash(find /Users/ethan/Library/Mobile\\\\ Documents/iCloud~md~obsidian/Documents/ES_notebook/Projects/数学引擎 -maxdepth 2 -name \"*.md\" 2>/dev/null | head -10)"
+    ]
+  }
+}

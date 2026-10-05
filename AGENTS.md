@@ -18,3 +18,13 @@
 - 构建：`tsc -b && vite build`
 - 后端依赖：MathEngine（`/Users/ethan/CoreFiles/ProjectsFile/MathEngine`）是统一数学后端。内嵌引擎 `engine/SymbolicComputationEngine`（Python）与 `engine/engine_ts`（TS）已标记 deprecated，迁移方向为调用 MathEngine API（`mathengine/symbolic` 重写 + `mathengine/proof` 校验）。前端纪律：只消费 Presentation-AST 子集（cell.content + frozen 标记 + 占位符 id），不触碰 E-graph 内部；详见 `docs/DEVELOPER_GUIDE.md` 第 8 节。
 - 双轨上下文：本项目属工程轨（MVP）。学术轨（λ-E-graph、证明证书、形式证明融合）在 EntelechySystem/EntelechySystem/MathEngineResearch，不在本项目排期。命名消歧：MathEngine=工程后端仓库；数学引擎/ME=跨两轨概念；matheshop=前端画布仓库。
+
+## 双轨导航（仓库 ↔ 笔记，磁盘实际路径）
+
+| 轨道 | 仓库 | 笔记目录（磁盘实际名） |
+|---|---|---|
+| 工程轨·前端（本项目） | `/Users/ethan/CoreFiles/ProjectsFile/matheshop` | `Engs_notebook/Projects/数学工坊`（统一工程笔记，含前端+后端） |
+| 工程轨·后端 | `/Users/ethan/CoreFiles/ProjectsFile/MathEngine` | `Engs_notebook/Projects/数学工坊`（同上） |
+| 学术轨·研究 | `EntelechySystem/EntelechySystem/MathEngineResearch`（宿主仓库 `/Users/ethan/CoreFiles/ProjectsFile/EntelechySystem`） | `ES_notebook/Projects/数学引擎`（学术探索笔记） |
+
+> 笔记根：Engs=`.../iCloud~md~obsidian/Documents/Engs_notebook`，ES=`.../iCloud~md~obsidian/Documents/ES_notebook`。工程笔记目录名为**数学工坊**（早期文档误记 Matheshop，磁盘无此目录）；学术笔记目录名为**数学引擎**。完整命名消歧表见 `../MathEngine/AGENTS.md`。

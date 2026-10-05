@@ -4,7 +4,9 @@ import MatheshopCanvasEditor from '../vue/MatheshopCanvasEditor.vue'
 import MatheshopAnalysisEditor from '../vue/MatheshopAnalysisEditor.vue'
 import MatheshopFilesEditor from '../vue/MatheshopFilesEditor.vue'
 import MatheshopSettingsEditor from '../vue/MatheshopSettingsEditor.vue'
+import MatheshopCnlEditor from '../vue/MatheshopCnlEditor.vue'
 import { matheshopWhiteboardFiles } from './whiteboardFiles'
+import { cnlConsole } from './cnlConsole'
 import { createMatheshopSettingsPersistenceAdapter } from './settingsPersistence'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommand } from './boardCommands'
 import { loadEngineSelection, type EngineChoice } from '../engine/engineSelection'
@@ -20,6 +22,9 @@ export const MATHESHOP_CANVAS_RENDERER_KEY = 'matheshop.renderer.canvas'
 export const MATHESHOP_FILES_RENDERER_KEY = 'matheshop.renderer.files'
 export const MATHESHOP_ANALYSIS_RENDERER_KEY = 'matheshop.renderer.analysis'
 export const MATHESHOP_SETTINGS_RENDERER_KEY = 'matheshop.renderer.settings'
+export const MATHESHOP_CNL_WORKSPACE_ID = 'matheshop.workspace.cnl'
+export const MATHESHOP_CNL_EDITOR_KIND = 'matheshop.cnl'
+export const MATHESHOP_CNL_RENDERER_KEY = 'matheshop.renderer.cnl'
 export const MATHESHOP_CANVAS_GROUP_ID = 'matheshop-group-main'
 
 export const MATHESHOP_ENGINE_CHOICE_SETTING_ID = 'matheshop.engineChoice'
@@ -84,6 +89,23 @@ const analysisEditor: EditorDescriptor = {
   availability: { allowedWorkspaceIds: [MATHESHOP_ANALYSIS_WORKSPACE_ID] },
 }
 
+const cnlEditor: EditorDescriptor = {
+  kind: MATHESHOP_CNL_EDITOR_KIND,
+  title: '受控自然语言',
+  description: '受控自然语言符号化接口（猜想模块）：解析中英混合 CNL 并多路导出',
+  icon: 'grid',
+  rendererKey: MATHESHOP_CNL_RENDERER_KEY,
+  capability: {
+    ...defaultEditorCapability,
+    allowDuplicate: false,
+    allowMultipleInstances: false,
+    allowClose: false,
+    launcherVisibility: 'hidden-when-opened',
+  },
+  presentation: defaultTabPresentation,
+  availability: { allowedWorkspaceIds: [MATHESHOP_CNL_WORKSPACE_ID] },
+}
+
 const settingsEditor: EditorDescriptor = {
   kind: MATHESHOP_SETTINGS_EDITOR_KIND,
   title: '设置',
@@ -102,7 +124,7 @@ const settingsEditor: EditorDescriptor = {
     modalWidth: 560,
     modalHeight: 420,
   },
-  availability: { allowedWorkspaceIds: [MATHESHOP_CANVAS_WORKSPACE_ID, MATHESHOP_FILES_WORKSPACE_ID, MATHESHOP_ANALYSIS_WORKSPACE_ID] },
+  availability: { allowedWorkspaceIds: [MATHESHOP_CANVAS_WORKSPACE_ID, MATHESHOP_FILES_WORKSPACE_ID, MATHESHOP_ANALYSIS_WORKSPACE_ID, MATHESHOP_CNL_WORKSPACE_ID] },
 }
 
 const canvasWorkspace: WorkspaceDescriptor = {
@@ -141,6 +163,18 @@ const analysisWorkspace: WorkspaceDescriptor = {
   allowUserReset: true,
 }
 
+const cnlWorkspace: WorkspaceDescriptor = {
+  id: MATHESHOP_CNL_WORKSPACE_ID,
+  title: '受控自然语言',
+  description: 'CNL 符号化接口与多路导出（猜想模块）',
+  icon: 'math',
+  allowedEditorKinds: [MATHESHOP_CNL_EDITOR_KIND, MATHESHOP_SETTINGS_EDITOR_KIND],
+  recommendedEditorKinds: [MATHESHOP_CNL_EDITOR_KIND, MATHESHOP_SETTINGS_EDITOR_KIND],
+  defaultOpenRequests: [{ editorKind: MATHESHOP_CNL_EDITOR_KIND, title: '受控自然语言符号化' }],
+  createDefaultLayout: () => createSingleGroupLayout({ groupId: 'matheshop-group-cnl', leafNodeId: 'matheshop-leaf-cnl' }),
+  allowUserReset: true,
+}
+
 const isEngineChoice = (value: unknown): value is EngineChoice => {
   return value === 'builtin_python' || value === 'builtin_native' || value === 'external'
 }
@@ -153,17 +187,21 @@ export const createMatheshopMainUiRuntime = () => {
   runtime.core.registerEditor(canvasEditor)
   runtime.core.registerEditor(filesEditor)
   runtime.core.registerEditor(analysisEditor)
+  runtime.core.registerEditor(cnlEditor)
   runtime.core.registerEditor(settingsEditor)
   runtime.core.registerWorkspace(canvasWorkspace)
   runtime.core.registerWorkspace(filesWorkspace)
   runtime.core.registerWorkspace(analysisWorkspace)
+  runtime.core.registerWorkspace(cnlWorkspace)
   const canvasRenderer = MatheshopCanvasEditor as unknown as Parameters<typeof runtime.vue.registerEditorRenderer>[1]
   const filesRenderer = MatheshopFilesEditor as unknown as Parameters<typeof runtime.vue.registerEditorRenderer>[1]
   const analysisRenderer = MatheshopAnalysisEditor as unknown as Parameters<typeof runtime.vue.registerEditorRenderer>[1]
+  const cnlRenderer = MatheshopCnlEditor as unknown as Parameters<typeof runtime.vue.registerEditorRenderer>[1]
   const settingsRenderer = MatheshopSettingsEditor as unknown as Parameters<typeof runtime.vue.registerEditorRenderer>[1]
   runtime.vue.registerEditorRenderer(MATHESHOP_CANVAS_RENDERER_KEY, canvasRenderer)
   runtime.vue.registerEditorRenderer(MATHESHOP_FILES_RENDERER_KEY, filesRenderer)
   runtime.vue.registerEditorRenderer(MATHESHOP_ANALYSIS_RENDERER_KEY, analysisRenderer)
+  runtime.vue.registerEditorRenderer(MATHESHOP_CNL_RENDERER_KEY, cnlRenderer)
   runtime.vue.registerEditorRenderer(MATHESHOP_SETTINGS_RENDERER_KEY, settingsRenderer)
 
   registerEngineChoiceSetting(runtime)
@@ -231,6 +269,18 @@ const registerBoardCommands = (runtime: ReturnType<typeof createMainUiRuntime>) 
   runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.toggleLinkMode', keybinding: 'L' })
   runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.deleteSelected', keybinding: 'Delete' })
   runtime.core.registerKeybinding({ commandId: 'matheshop.canvas.deleteSelected', keybinding: 'Backspace' })
+
+  // 受控自然语言符号化：直调 core 单例（猜想模块），与画布 board 命令解耦
+  runtime.core.registerCommand({
+    id: 'matheshop.cnl.process',
+    title: '解析受控自然语言',
+    category: 'Matheshop',
+    when: (context: { workspaceId: string }) => context.workspaceId === MATHESHOP_CNL_WORKSPACE_ID,
+    run: () => {
+      void cnlConsole.process()
+    },
+  })
+  runtime.core.registerKeybinding({ commandId: 'matheshop.cnl.process', keybinding: 'Ctrl+Enter' })
 }
 
 export const matheshopRuntime = createMatheshopMainUiRuntime()
