@@ -26,7 +26,7 @@ pnpm preview --host 127.0.0.1 --port 4173
 cd engine\SymbolicComputationEngineServer
 uv venv --python 3.13
 uv pip install --python .\.venv\Scripts\python.exe --index-url https://pypi.org/simple -r requirements.txt
-$env:MATHSYMCALC_ENGINE_ROOT = 'C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine'
+$env:MATHSYMCALC_ENGINE_ROOT = '<path-to-MathSymbolicComputationEngine>'
 $env:PORT = 8000
 .\.venv\Scripts\python.exe -m matheshop_engine_server
 ```

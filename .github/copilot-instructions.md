@@ -41,8 +41,10 @@
 
 **本项目**办公区位于工作区根路径的以下文件夹：
 
-- [MS-docs](../../../Mobile%20Documents/iCloud~md~obsidian/Documents/Engs_notebook/Projects/数学工坊/docs/)。
-- [数学引擎-docs](../../../Mobile%20Documents/iCloud~md~obsidian/Documents/ES_notebook/Projects/数学引擎/docs/)。
+- [MS-docs](<办公区位置>/docs/)：工程轨统一笔记（前端 + 后端）。
+- [数学引擎-docs](<办公区位置>/docs/)：学术轨探索笔记。
+
+  实际本机路径见工作区文件（`*.code-workspace`，不入库）。
 
   注意：
 

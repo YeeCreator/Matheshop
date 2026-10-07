@@ -8,7 +8,7 @@
 - 视口、相机、screen/world 坐标换算统一使用 `viewport-2d-kit`。
 - 前端业务核心逻辑必须放在框架无关的 TypeScript core 中。
 - Vue3 只承担渲染、事件绑定、订阅 core 快照和调用 core action。
-- 后台计算默认对接外部 Python 包 `C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`。
+- 后台计算默认对接外部 Python 包 `<path-to-MathSymbolicComputationEngine>`。
 - 不保留旧 React 迁移壳和兼容路径。
 
 ## 2. 目录边界
@@ -72,7 +72,7 @@ Vue 组件应避免直接改写业务状态，统一通过 `matheshopBoard` 的�
 外部引擎路径通过环境变量控制：
 
 ```powershell
-$env:MATHSYMCALC_ENGINE_ROOT = 'C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine'
+$env:MATHSYMCALC_ENGINE_ROOT = '<path-to-MathSymbolicComputationEngine>'
 ```
 
 推荐环境安装：

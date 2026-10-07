@@ -2,7 +2,7 @@
 
 这是 Matheshop 的 **内置 Python 引擎 HTTP 服务层**（FastAPI）。
 
-- 核心计算库：`C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`（Python 包名：`mathsymcalc`）
+- 核心计算库：`<path-to-MathSymbolicComputationEngine>`（Python 包名：`mathsymcalc`）
 - HTTP 服务模块名：`matheshop_engine_server`
 
 默认会从环境变量 `MATHSYMCALC_ENGINE_ROOT` 读取外部引擎路径；未设置时使用上面的本机默认路径。
@@ -13,7 +13,7 @@
 cd engine\SymbolicComputationEngineServer
 uv venv --python 3.13
 uv pip install --python .\.venv\Scripts\python.exe --index-url https://pypi.org/simple -r requirements.txt
-$env:MATHSYMCALC_ENGINE_ROOT = 'C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine'
+$env:MATHSYMCALC_ENGINE_ROOT = '<path-to-MathSymbolicComputationEngine>'
 $env:PORT = 8000
 .\.venv\Scripts\python.exe -m matheshop_engine_server
 ```

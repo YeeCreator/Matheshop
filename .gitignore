@@ -1102,3 +1102,6 @@ docs/mailbox/relay/archive/
 
 # mailbox/relay — 治理信箱已迁出仓库（2026-10-05）
 docs/mailbox/relay/
+
+# 本机 IDE 设置（含命令历史与本机路径），不入库（2026-10-07）
+.qoder/settings.local.json

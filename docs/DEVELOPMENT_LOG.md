@@ -28,7 +28,7 @@
 - 使用 `viewport-2d-kit/vue` 和 `viewport-2d-kit/core` 统一处理二维视口渲染与 screen/world 坐标换算。
 - 新增 `src/core/` 作为框架无关 TypeScript core，负责画布快照、Cell/Edge、编辑、移动、缩放、连线与求值。
 - 新增 `src/vue/` 渲染层，Vue 组件只订阅 core 快照并转发用户事件。
-- 前端默认计算引擎改为 `builtin_python`，后端服务通过 `MATHSYMCALC_ENGINE_ROOT` 对接外部 `C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`。
+- 前端默认计算引擎改为 `builtin_python`，后端服务通过 `MATHSYMCALC_ENGINE_ROOT` 对接外部 `<path-to-MathSymbolicComputationEngine>`。
 - 移除 Python 服务 requirements 中对外部引擎的 editable 安装要求，改为运行时路径注入，避免外部 flat-layout 仓库被 setuptools 自动发现阻塞安装。
 - 刷新 `package.json` 与 `pnpm-lock.yaml`：保留 `vue`、`main-ui`、`viewport-2d-kit`、`katex`，移除旧 React/Radix/TanStack 等直接依赖。
 - 校验：`pnpm build` 通过；生产预览 `http://127.0.0.1:4173/` 显示 `main-ui Vue3 workbench` 与 Vue 画布；Python 服务入口调用 `eval_text('1+2*3')` 返回 `7.0`。
@@ -289,4 +289,4 @@
 - 现象：当画布中没有任何节点时，执行平移/缩放会看到业务节点参考缺失，且网格看起来不跟随视口变化，易误判为视口失效。
 - 根因：`src/components/CanvasBoard.tsx` 的网格可见范围计算使用了 workspace/canvas 尺寸语义，和当前可视口（`wrap`）不一致，导致网格绘制锚定范围与实际观察窗口脱节。
 - 修复：网格仍保持在 world 空间绘制，不迁移到 `viewport-2d-kit` 的独立绘制层；仅将 `getVisibleWorldBox` 的尺寸输入改为 `wrap.getBoundingClientRect()`，保证网格按当前可视口计算并随 camera 变化。
-- 验证：执行 `pnpm -C C:\Users\Ethan\CoreFiles\ProjectsFile\matheshop build` 通过（`tsc -b && vite build`），无编译错误。
+- 验证：执行 `pnpm -C <matheshop-repo-root> build` 通过（`tsc -b && vite build`），无编译错误。

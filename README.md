@@ -2,7 +2,7 @@
 
 Matheshop 是一个基于 **Vue3 + TypeScript core** 的数学白板原型。界面壳层统一使用 `main-ui`，二维视口统一使用 `viewport-2d-kit`，业务核心逻辑放在不依赖前端框架的 TypeScript 模块中；Vue3 只负责渲染和事件转发。
 
-后台计算默认对接外部 Python 高性能符号计算包：`C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine`。
+后台计算默认对接外部 Python 高性能符号计算包：`<path-to-MathSymbolicComputationEngine>`。
 
 ## 双轨定位与命名消歧
 
@@ -58,7 +58,7 @@ pnpm preview --host 127.0.0.1 --port 4173
 cd engine\SymbolicComputationEngineServer
 uv venv --python 3.13
 uv pip install --python .\.venv\Scripts\python.exe --index-url https://pypi.org/simple -r requirements.txt
-$env:MATHSYMCALC_ENGINE_ROOT = 'C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine'
+$env:MATHSYMCALC_ENGINE_ROOT = '<path-to-MathSymbolicComputationEngine>'
 $env:PORT = 8000
 .\.venv\Scripts\python.exe -m matheshop_engine_server
 ```

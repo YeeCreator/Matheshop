@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 DEFAULT_ENGINE_ROOT = Path(os.environ.get(
     "MATHSYMCALC_ENGINE_ROOT",
-    "C:/Users/Ethan/CoreFiles/ProjectsFile/MathSymbolicComputationEngine",
+    "<path-to-MathSymbolicComputationEngine>",
 )).resolve()
 
 if DEFAULT_ENGINE_ROOT.exists():

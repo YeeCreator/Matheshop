@@ -3,7 +3,7 @@
 > [!warning] DEPRECATED（双轨重构）
 > 本内嵌 Python 符号计算引擎已标记为弃用。迁移方向：调用 MathEngine 后端 API
 > （`mathengine/symbolic` 重写 + `mathengine/proof` 校验）。MathEngine 仓库位于
-> `/Users/ethan/CoreFiles/ProjectsFile/MathEngine`。退役不在本次重构执行，
+> `<MathEngine 仓库根>`。退役不在本次重构执行，
 > 仅标注方向；过渡期由 `engine/SymbolicComputationEngineServer/` 适配壳把
 > 求值请求逐步转发到 MathEngine。见 `docs/DEVELOPER_GUIDE.md` 第 8 节前端纪律。
 
