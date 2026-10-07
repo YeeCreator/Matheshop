@@ -1105,3 +1105,8 @@ docs/mailbox/relay/
 
 # 本机 IDE 设置（含命令历史与本机路径），不入库（2026-10-07）
 .qoder/settings.local.json
+
+# 本机环境配置（含真实路径），不入库（2026-10-07 · 开源适配规范 规则 2）
+.env
+.env.local
+.env.*.local
