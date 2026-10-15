@@ -27,13 +27,14 @@
 
     <template #world="{ camera, bridge }">
       <div class="matheshop-world" @dblclick.self="onCanvasDoubleClick($event, camera, bridge)">
+        <span v-if="syncCamera(camera)" aria-hidden="true" />
         <article
           v-for="cell in snapshot.cells"
           :key="cell.id"
           class="matheshop-cell"
           :class="cellClass(cell.id)"
           :style="cellStyle(cell)"
-          @click.stop="onCellClick(cell.id)"
+          @click.stop="onCellClick(cell.id, $event)"
           @dblclick.stop="beginEditing(cell.id)"
           @pointerdown.stop="onCellPointerDown($event, cell, camera, bridge)"
         >
@@ -112,6 +113,9 @@
           @anchor-hover="onAnchorHover"
           @anchor-click="onAnchorClick"
         />
+
+        <h2>缩略导航（T6）</h2>
+        <MatheshopMinimap :cells="surfaceCells" :viewport="minimapViewport" />
       </div>
     </template>
   </MatheshopBoardStage>
@@ -134,6 +138,9 @@ import type { CellKind, ConceptShape, MatheshopCell, MatheshopEdge, Vec2 } from 
 import type { RelationDatum } from '../core/relationData'
 import { fetchRenderableStructure } from '../engine/renderableClient'
 import { deriveAnchors, matheshopSymbols } from '../core/symbolTable'
+import { packSubgraph, resolveAction } from '../core/interactions'
+import { asMiniCanvas } from '../core/miniCanvas'
+import MatheshopMinimap from '../components/canvas/MatheshopMinimap.vue'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
 import { MATHESHOP_ENGINE_CHOICES } from '../core/workbenchConstants'
@@ -230,6 +237,29 @@ const surfaceCells = computed(() => snapshot.value.cells.map((cell) => ({
   width: cell.size.w,
   height: cell.size.h,
 })))
+/**
+ * T6 minimap 的当前视口矩形（世界坐标）。
+ *
+ * 相机由 `MatheshopBoardStage` 内部持有并经 `#world` 插槽透出；此处记录
+ * 最近一次透出的相机，供 minimap 换算视口范围（世界坐标 = -pan / scale 起算）。
+ */
+const lastCamera = ref<Camera2D>({ scale: 1, pan: { x: 0, y: 0 } })
+/** 同步上游画布壳透出的相机（供 minimap 换算视口）。 */
+const syncCamera = (camera: Camera2D) => {
+  lastCamera.value = camera
+}
+
+const minimapViewport = computed(() => {
+  const cam = lastCamera.value
+  const scale = Math.max(cam.scale, 1e-6)
+  return {
+    x: -cam.pan.x / scale,
+    y: -cam.pan.y / scale,
+    width: viewBox.width / scale,
+    height: viewBox.height / scale,
+  }
+})
+
 const surfaceEdges = computed(() => snapshot.value.edges.map((edge) => ({ id: edge.id, source: edge.from, target: edge.to })))
 
 let unsubscribe: (() => void) | null = null
@@ -382,8 +412,34 @@ const onCanvasDoubleClick = (event: MouseEvent, camera: Camera2D, bridge: Canvas
   void nextTick(() => focusActiveEditor())
 }
 
-const onCellClick = (cellId: string) => {
-  activeBoard.value.handleCellLinkClick(cellId)
+/**
+ * T6 多模态动作分派：按修饰键把同一次点击路由到不同动作（设计 §6.3）。
+ * 连线模式下优先走连线语义。
+ */
+const onCellClick = (cellId: string, event?: MouseEvent) => {
+  if (snapshot.value.linkMode) {
+    activeBoard.value.handleCellLinkClick(cellId)
+    return
+  }
+  const action = resolveAction('click', {
+    alt: event?.altKey,
+    ctrl: event?.ctrlKey,
+    meta: event?.metaKey,
+  })
+  if (action === 'open-panel') {
+    // Ctrl/⌘+左键：新面板打开（此处用状态栏提示占位，面板拆分由主界面壳承载）
+    activeBoard.value.selectCell(cellId)
+    return
+  }
+  if (action === 'inline-toggle') {
+    // Alt+左键：就地展开/折叠（便签切换视图态；普通单元切换粒度档）
+    const cell = snapshot.value.cells.find((item) => item.id === cellId)
+    const mini = cell ? asMiniCanvas(cell) : null
+    if (mini) activeBoard.value.setMiniCanvasView(cellId, mini.view === 'thumbnail' ? 'expanded' : 'thumbnail')
+    else activeBoard.value.setCellDensity(cellId, (cell?.density ?? 1) >= 0.5 ? 0 : 1)
+    return
+  }
+  activeBoard.value.selectCell(cellId)
 }
 
 const beginEditing = (cellId: string) => {
@@ -477,7 +533,30 @@ const onGlobalKeydown = (event: KeyboardEvent) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
   if (event.key === 'Escape') {
     activeBoard.value.cancelEditing()
+    return
   }
+  // T6 子图封装（Ctrl/⌘+G）：把当前选中单元折叠为复合节点并报告端口。
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'g') {
+    event.preventDefault()
+    packSelectedAsSubgraph()
+  }
+}
+
+/** T6 子图封装：读选中单元 + 边表 → 推导端口 → 报告（折叠渲染待后续接入画布层）。 */
+const packSelectedAsSubgraph = () => {
+  const selected = snapshot.value.selectedCellId
+  if (!selected) {
+    activeBoard.value.setStatusMessage('请先选中要封装的单元。')
+    return
+  }
+  const composite = packSubgraph({
+    id: `subgraph-${selected}`,
+    members: [selected],
+    edges: snapshot.value.edges.map((edge) => ({ from: edge.from, to: edge.to })),
+  })
+  activeBoard.value.setStatusMessage(
+    `已封装子图：${composite.members.length} 个成员 · 入端口 ${composite.inputPorts.length} · 出端口 ${composite.outputPorts.length}`,
+  )
 }
 
 /** 判断当前激活的 editor 是否为本实例，避免多个白板标签页同时响应全局命令。 */

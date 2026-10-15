@@ -3,6 +3,7 @@ import { processCnl as requestCnlProcess, type CnlExportKey, type CnlUnit } from
 import { DEFAULT_ENGINE_SELECTION, loadEngineSelection, saveEngineSelection, type EngineChoice, type EngineSelectionState } from '../engine/engineSelection'
 import { parseBlocksFromText } from './blocks'
 import { asMiniCanvas, deriveSubBoardRef, type SubBoardRef } from './miniCanvas'
+import { validateEdge } from './interactions'
 import type { CellBlock, CellId, CellKind, DerivationStatus, EdgeId, EdgeKind, FrozenMark, MatheshopCell, MatheshopEdge, MatheshopHistoryEntry, MatheshopTool, Size, Vec2 } from './matheshopTypes'
 
 export type CnlBoardResult =
@@ -288,6 +289,21 @@ export class MatheshopBoardCore {
       return
     }
 
+    // T6 端口约束 DAG：连线须从结论端口连到前提端口，且不得成环/自环。
+    const violations = validateEdge({
+      edges: this.snapshot.edges.map((edge) => ({ from: edge.from, to: edge.to })),
+      from,
+      to: cellId,
+    })
+    if (violations.length > 0) {
+      this.setSnapshot({
+        ...this.snapshot,
+        linkFromCellId: null,
+        statusMessage: `连线被拒：${violations[0].message}`,
+      })
+      return
+    }
+
     const exists = this.snapshot.edges.some((edge) => (edge.from === from && edge.to === cellId) || (edge.from === cellId && edge.to === from))
     const nextEdges = exists ? this.snapshot.edges : [...this.snapshot.edges, { id: createId('edge'), from, to: cellId }]
     this.setSnapshot({
@@ -298,6 +314,11 @@ export class MatheshopBoardCore {
       history: exists ? this.snapshot.history : [this.createHistory('创建连线'), ...this.snapshot.history].slice(0, 40),
       statusMessage: exists ? '连线已存在。' : '已创建连线。',
     })
+  }
+
+  /** 设置状态栏消息（供视图层反馈交互结果，如端口约束拒绝、子图封装报告）。 */
+  setStatusMessage(message: string): void {
+    this.setSnapshot({ ...this.snapshot, statusMessage: message })
   }
 
   setCellKind(cellId: CellId, kind?: CellKind): void {
