@@ -54,9 +54,20 @@
 
 使用方式：
 
-- 画布舞台、相机、指针/滚轮交互、fit 与坐标桥**全部由官方 `@main-ui/view-canvas` 提供**（`ViewportCanvas` + `ViewportCanvasShell` + `buildHostBridge`）；相机数学内核为 `@main-ui/core/rendering`（已吸收原 `viewport-2d-kit`）。
-- `MatheshopBoardStage` 只补两项 matheshop 专有内容：**cell 间三次贝塞尔连线层** 与 **`#world` 世界内容插槽**（回传 `camera` / `bridge`）。
-- 平移交互：官方模板的**左键拖拽**平移（与旧本地壳的「空格+拖拽 / 中键拖拽」不同）；滚轮以光标为锚点缩放。
+- 画布舞台、相机、指针/滚轮交互、fit 与坐标桥由官方 `@main-ui/view-canvas` 提供（`ViewportCanvas` + `ViewportCanvasShell` + `buildHostBridge`）；相机数学内核为 `@main-ui/core/rendering`（已吸收原 `viewport-2d-kit`）。
+- `MatheshopBoardStage` 补三项 matheshop 专有内容：**cell 间三次贝塞尔连线层**、**`#world` 世界内容插槽**（回传 `camera` / `bridge`），以及**PRD 相机手势补全**（`cameraInteractions.ts`）。
+- 平移/缩放手势（与 `docs/PRD.md` §4.1 一一对应）：
+
+  | PRD | 手势 | 来源 |
+  | --- | --- | --- |
+  | FR-001 | 鼠标滚轮缩放（0.08~64） | 官方模板内置 |
+  | FR-002 | 中键拖拽平移 | 本适配层补 |
+  | FR-003 | 空格+左键拖拽平移 | 本适配层补 |
+  | FR-004 | Shift+滚轮横向平移 | 本适配层补 |
+  | FR-005 | 拦截 Ctrl/⌘+滚轮的页面缩放，统一为画布缩放 | 官方模板内置 |
+  | — | 左键拖拽平移 | 官方模板内置 |
+
+- 补全手势挂在**官方画布外围包裹元素**的**捕获阶段**；命中即 `stopPropagation()` 阻止模板响应，未命中不拦截。相机读写走模板 `getCamera` / `setCamera`，复用其缩放约束。
 
 后续新增任何画布行为时，不要重新实现独立相机或旧坐标适配器；`viewport-2d-kit` 与本地壳 `MatheshopCanvasSurface.vue` 均已退役，不得再引入。
 

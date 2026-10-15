@@ -20,7 +20,16 @@
 - 新增 `src/components/canvas/MatheshopBoardStage.vue`：官方模板之上的**薄适配层**——相机、指针/滚轮交互、fit、坐标桥全部改用 `ViewportCanvas` / `ViewportCanvasShell` / `buildHostBridge`；本地只保留两项专有内容（cell 间三次贝塞尔**连线层**、`#world` 世界内容插槽）。
 - **删除** `src/components/canvas/MatheshopCanvasSurface.vue`（自实现的相机数学/交互/空格平移与官方模板重复）。2026-10-07 反馈信 §5 验收承诺的后半达成。
 - 依赖：`package.json` 新增 `@main-ui/view-canvas`。
-- **行为变更（须知悉）**：平移由「空格+左键 / 中键拖拽」改为官方模板的**左键拖拽**；`docs/PRD.md` FR-003 相应表述待用户确认后再改。
+- **行为变更（须知悉）**：平移手势在官方模板「左键拖拽」之上，由适配层**补齐 PRD 原有三条**——中键拖拽（FR-002）、空格+左键拖拽（FR-003）、Shift+滚轮横向平移（FR-004）；`docs/PRD.md` **无需改动**。
+
+### 相机手势补全（`cameraInteractions.ts`）
+
+- 官方 `ViewportCanvas` 内置交互仅「左键拖拽平移 + 滚轮以光标为锚点缩放」（后者覆盖 PRD FR-001 与 FR-005）；PRD 另要求的三条由**适配层**补齐。
+- **补法**：监听挂在**官方画布外围的包裹元素**（`.matheshop-board-stage__gestures`）的**捕获阶段** —— 捕获先于目标元素上的模板监听器，命中所辖手势时 `stopPropagation()` 即阻止模板响应；未命中的手势不拦截，照常冒泡。
+- 相机读写经模板暴露的 `getCamera` / `setCamera`，复用其 `minScale`/`maxScale` 约束。
+- **修正**：`panBy` 接收**屏幕像素**位移（相机 `pan` 即屏幕空间），故 Shift+滚轮**不得**再除以 `scale`，否则视口移动量被放大 `1/scale` 倍（初版即犯此错，实测 120 滚轮量产生 1030 屏幕位移，修正后为 120）。
+- 单测 5 项（三条判定 + 位移折算 + 灵敏度）；MS 全量 **33 passed**（原 28）。
+- **实测**：中键拖拽 `+40/+20`、空格+左键拖拽 `+50/+25`、Shift+滚轮 120 量 → `+120`、模板内置左键拖拽 `+30/+10`、普通滚轮缩放 0.13→0.179，**五项全部生效**。
 - 附带修复：`const { document } = useWorkbench()` 遮蔽全局 `document`，导致 `focusActiveEditor()` 抛 `TypeError: document.querySelector is not a function`（双击新建单元框必然触发）。重命名为 `workbenchDocument`。
 - **浏览器实测**：双击新建单元框（2→3→4）并自动聚焦编辑器；拖拽移动单元框（120,120 → 1043,582）；左键拖拽平移与滚轮缩放均生效；右面板 Inspector / 历史 / 符号表齐全；无页面错误。
 

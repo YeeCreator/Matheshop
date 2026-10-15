@@ -20,21 +20,23 @@
       :style="{ background }"
     >
       <template #default="{ cameraTransform, camera }">
-        <div
-          class="matheshop-board-stage__camera"
-          :data-camera-transform="cameraTransform"
-          :style="{ transform: cameraTransform, transformOrigin: '0 0' }"
-        >
-          <svg
-            class="matheshop-board-stage__edges"
-            :viewBox="bridge.viewBoxText"
-            :width="viewBox.width"
-            :height="viewBox.height"
-            aria-hidden="true"
+        <div ref="gestureHostRef" class="matheshop-board-stage__gestures">
+          <div
+            class="matheshop-board-stage__camera"
+            :data-camera-transform="cameraTransform"
+            :style="{ transform: cameraTransform, transformOrigin: '0 0' }"
           >
-            <path v-for="edge in edgePaths" :key="edge.id" class="matheshop-board-stage__edge" :d="edge.path" />
-          </svg>
-          <slot name="world" :camera="camera" :bridge="bridge" />
+            <svg
+              class="matheshop-board-stage__edges"
+              :viewBox="bridge.viewBoxText"
+              :width="viewBox.width"
+              :height="viewBox.height"
+              aria-hidden="true"
+            >
+              <path v-for="edge in edgePaths" :key="edge.id" class="matheshop-board-stage__edge" :d="edge.path" />
+            </svg>
+            <slot name="world" :camera="camera" :bridge="bridge" />
+          </div>
         </div>
       </template>
     </ViewportCanvas>
@@ -45,11 +47,15 @@
 /**
  * MatheshopBoardStage —— matheshop 画布舞台（官方 `@main-ui/view-canvas` 之上的薄适配层）。
  *
- * 相机数学、指针/滚轮交互、fit 与坐标桥**全部由官方模板提供**（`ViewportCanvas` /
- * `ViewportCanvasShell` / `useViewportHostBridge`）；本组件只补两件 matheshop 专有的事：
+ * **来自官方模板**：画布容器与三栏壳（`ViewportCanvasShell`）、相机状态与 fit、滚轮以光标为锚点缩放
+ * （覆盖 PRD FR-001 与 FR-005 页面缩放拦截）、**左键拖拽平移**、`resize` 自适应、坐标桥基础。
+ *
+ * **本适配层补的三件事**（不侵入模板）：
  *
  * 1. **连线层**：cell 之间的三次贝塞尔路径（`cells` / `edges` → SVG path）；
- * 2. **世界内容插槽**：`#world` 槽在相机变换内渲染宿主单元框，并回传坐标桥。
+ * 2. **世界内容插槽**：`#world` 槽在相机变换内渲染宿主单元框，并回传坐标桥；
+ * 3. **PRD 相机手势补全**（`cameraInteractions.ts`）：中键拖拽平移（FR-002）、空格+左键拖拽平移（FR-003）、
+ *    Shift+滚轮横向平移（FR-004）—— 这三条官方模板未内置，用包裹元素上的捕获阶段监听补齐。
  *
  * 旧本地壳 `MatheshopCanvasSurface.vue` 已随之退役（其自实现的相机/交互逻辑与官方模板重复）。
  */
@@ -61,6 +67,7 @@ import {
   type ViewportHostBridge,
 } from '@main-ui/view-canvas'
 import type { Camera2D, ViewBox } from '@main-ui/core/rendering'
+import { installCameraInteractions } from './cameraInteractions'
 
 /** 连线层消费的画布单元（世界坐标矩形）。 */
 export type SurfaceCell = { id: string; x: number; y: number; width: number; height: number }
@@ -93,6 +100,7 @@ const minScaleFactor = computed(() => props.minScaleFactor ?? 0.08)
 const maxScaleFactor = computed(() => props.maxScaleFactor ?? 64)
 
 const canvasRef = ref<InstanceType<typeof ViewportCanvas> | null>(null)
+const gestureHostRef = ref<HTMLElement | null>(null)
 
 /** client 坐标 → 视口容器内局部屏幕坐标。 */
 const toLocal = (clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -103,6 +111,18 @@ const toLocal = (clientX: number, clientY: number): { x: number; y: number } | n
 }
 
 const bridge: ViewportHostBridge = buildHostBridge(props.viewBox, toLocal)
+
+/**
+ * PRD 相机手势补全（FR-002 中键 / FR-003 空格+左键 / FR-004 Shift+滚轮）。
+ *
+ * 相机读写走官方模板暴露的命令式 API（`getCamera` / `setCamera`），以复用其 min/max 缩放约束；
+ * 挂载点为**包裹元素**（官方画布之外），捕获阶段拦截，不影响模板自身与宿主单元框的事件。
+ */
+installCameraInteractions({
+  host: gestureHostRef,
+  getCamera: () => canvasRef.value?.getCamera() ?? { scale: 1, pan: { x: 0, y: 0 } },
+  setCamera: (camera) => canvasRef.value?.setCamera(camera),
+})
 
 const centerOf = (cell: SurfaceCell) => ({ x: cell.x + cell.width / 2, y: cell.y + cell.height / 2 })
 
@@ -132,6 +152,12 @@ defineExpose({
 </script>
 
 <style scoped>
+.matheshop-board-stage__gestures {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
 .matheshop-board-stage__camera {
   position: absolute;
   left: 0;
