@@ -33,7 +33,48 @@ export type LatexBlock = {
   frozen?: boolean
 }
 
-export type CellBlock = TextBlock | LatexBlock
+export type CellBlock = TextBlock | LatexBlock | ConceptIconBlock
+
+/** 契约1 契约1 · 概念象形图标：形态只表类别、不承载推理（低密度档渲染）。 */
+export type ConceptShape = 'matrix' | 'network' | 'space3d' | 'handRule' | 'domain' | 'generic'
+
+export type ConceptIconBlock = {
+  id: string
+  type: 'conceptIcon'
+  /** 形态类别（不承载推理信息，仅索引心智模型）。 */
+  shape: ConceptShape
+  /** 可选短标签（不写公式、不带下标）。 */
+  caption?: string
+}
+
+/** 契约1 · 知识单元类型（视图层枚举；缺省视为普通文本单元）。 */
+export type CellKind =
+  | 'Definition'
+  | 'Axiom'
+  | 'Lemma'
+  | 'Theorem'
+  | 'Corollary'
+  | 'Proof'
+  | 'Example'
+  | 'CounterExample'
+  | 'Exercise'
+  | 'ConceptSketch'
+  | 'VisualModel'
+
+/** 契约2 · 语义关系边类型（12 值，与学术轨 IR 边类型同源命名）。 */
+export type EdgeKind =
+  | 'uses'
+  | 'implies'
+  | 'illustrates'
+  | 'contradicts'
+  | 'derives'
+  | 'equivalent'
+  | 'counterexample'
+  | 'refutes'
+  | 'analogous'
+  | 'dual'
+  | 'specializes'
+  | 'generalizes'
 
 export type MatheshopCell = {
   id: CellId
@@ -43,16 +84,27 @@ export type MatheshopCell = {
   color: string
   content: string
   blocks: CellBlock[]
+  /** 契约1 知识单元类型（视图层枚举；缺省视为普通文本单元）。 */
+  kind?: CellKind
   /** D6 推导状态：CNL 候选结果为 conjecture，经校验/重写后升级；渲染层据此视觉区分。 */
   status?: DerivationStatus
   /** D4 冻结标记：单元被子式冻结时承载占位符登记（视图层，不入对象层 IR）。 */
   frozen?: FrozenMark
+  /**
+   * 契约1 视图层元属性：连续语义粒度（0..1）。
+   * 低密度≈概念象形图标，高密度≈完整 LaTeX。不入对象层 IR，导出不泄露。
+   */
+  density?: number
 }
 
 export type MatheshopEdge = {
   id: EdgeId
   from: CellId
   to: CellId
+  /** 契约2 语义关系边类型（缺省 = 无类型链接，兼容旧数据）。 */
+  kind?: EdgeKind
+  /** 注释边：如「A→B：此处用三角不等式放缩」。 */
+  label?: string
 }
 
 export type MatheshopHistoryEntry = {

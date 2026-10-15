@@ -2,7 +2,7 @@ import { evalExpression } from '../engine/engineClient'
 import { processCnl as requestCnlProcess, type CnlExportKey, type CnlUnit } from '../engine/cnlEngineClient'
 import { DEFAULT_ENGINE_SELECTION, loadEngineSelection, saveEngineSelection, type EngineChoice, type EngineSelectionState } from '../engine/engineSelection'
 import { parseBlocksFromText } from './blocks'
-import type { CellBlock, CellId, DerivationStatus, FrozenMark, MatheshopCell, MatheshopEdge, MatheshopHistoryEntry, MatheshopTool, Size, Vec2 } from './matheshopTypes'
+import type { CellBlock, CellId, CellKind, DerivationStatus, EdgeId, EdgeKind, FrozenMark, MatheshopCell, MatheshopEdge, MatheshopHistoryEntry, MatheshopTool, Size, Vec2 } from './matheshopTypes'
 
 export type CnlBoardResult =
   | { ok: true; units: CnlUnit[]; exports: Partial<Record<CnlExportKey, string>> }
@@ -52,7 +52,7 @@ const cloneSnapshot = (snapshot: MatheshopBoardSnapshot): MatheshopBoardSnapshot
   engineSelection: { ...snapshot.engineSelection },
 })
 
-const createCell = (args: { seq: number; position: Vec2; color: string; content?: string }): MatheshopCell => {
+const createCell = (args: { seq: number; position: Vec2; color: string; content?: string; kind?: CellKind }): MatheshopCell => {
   const content = args.content ?? ''
   return {
     id: createId('cell'),
@@ -62,6 +62,7 @@ const createCell = (args: { seq: number; position: Vec2; color: string; content?
     color: args.color,
     content,
     blocks: parseBlocksFromText(content),
+    ...(args.kind ? { kind: args.kind } : {}),
   }
 }
 
@@ -294,6 +295,34 @@ export class MatheshopBoardCore {
       history: exists ? this.snapshot.history : [this.createHistory('创建连线'), ...this.snapshot.history].slice(0, 40),
       statusMessage: exists ? '连线已存在。' : '已创建连线。',
     })
+  }
+
+  setCellKind(cellId: CellId, kind?: CellKind): void {
+    const cells = this.snapshot.cells.map((cell) => (cell.id === cellId ? { ...cell, ...(kind ? { kind } : { kind: undefined }) } : cell))
+    this.setSnapshot({
+      ...this.snapshot,
+      cells,
+      history: [this.createHistory(`设置类型：${kind ?? '（无）'}`), ...this.snapshot.history].slice(0, 40),
+      statusMessage: kind ? `单元类型已设为 ${kind}。` : '单元类型已清除。',
+    })
+  }
+
+  setEdgeKind(edgeId: EdgeId, kind?: EdgeKind, label?: string): void {
+    const edges = this.snapshot.edges.map((edge) =>
+      edge.id === edgeId ? { ...edge, ...(kind ? { kind } : {}), ...(label !== undefined ? { label } : {}) } : edge,
+    )
+    this.setSnapshot({
+      ...this.snapshot,
+      edges,
+      history: [this.createHistory(`设置关系：${kind ?? '（无类型）'}${label ? ` · ${label}` : ''}`), ...this.snapshot.history].slice(0, 40),
+      statusMessage: kind ? `关系类型已设为 ${kind}。` : '关系类型已清除。',
+    })
+  }
+
+  setCellDensity(cellId: CellId, density: number): void {
+    const clamped = Math.min(1, Math.max(0, density))
+    const cells = this.snapshot.cells.map((cell) => (cell.id === cellId ? { ...cell, density: clamped } : cell))
+    this.setSnapshot({ ...this.snapshot, cells, statusMessage: `粒度已设为 ${clamped.toFixed(2)}。` })
   }
 
   async evaluateSelected(): Promise<void> {
