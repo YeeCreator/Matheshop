@@ -1,5 +1,5 @@
 <template>
-  <MatheshopBoardStage :cells="surfaceCells" :edges="surfaceEdges" :view-box="viewBox">
+  <MatheshopBoardStage ref="stageRef" :cells="surfaceCells" :edges="surfaceEdges" :view-box="viewBox">
     <template #left>
       <div class="matheshop-side-content">
         <h2>工具</h2>
@@ -27,7 +27,6 @@
 
     <template #world="{ camera, bridge }">
       <div class="matheshop-world" @dblclick.self="onCanvasDoubleClick($event, camera, bridge)">
-        <span v-if="syncCamera(camera)" aria-hidden="true" />
         <article
           v-for="cell in snapshot.cells"
           :key="cell.id"
@@ -243,12 +242,15 @@ const surfaceCells = computed(() => snapshot.value.cells.map((cell) => ({
  * 相机由 `MatheshopBoardStage` 内部持有并经 `#world` 插槽透出；此处记录
  * 最近一次透出的相机，供 minimap 换算视口范围（世界坐标 = -pan / scale 起算）。
  */
-const lastCamera = ref<Camera2D>({ scale: 1, pan: { x: 0, y: 0 } })
-/** 同步上游画布壳透出的相机（供 minimap 换算视口）。 */
-const syncCamera = (camera: Camera2D) => {
-  lastCamera.value = camera
-}
-
+/**
+ * 上游画布壳的相机引用（供 minimap 换算视口）。
+ *
+ * ⚠️ 不得在模板里以 `v-if="sync(camera)"` 的形式同步——那会在渲染期间写入
+ * 响应式状态，触发 `Maximum recursive updates exceeded`（实测踩过）。
+ * 正确做法：通过子组件暴露的方法按需读取。
+ */
+const stageRef = ref<InstanceType<typeof MatheshopBoardStage> | null>(null)
+const lastCamera = computed<Camera2D>(() => stageRef.value?.getCamera?.() ?? { scale: 1, pan: { x: 0, y: 0 } })
 const minimapViewport = computed(() => {
   const cam = lastCamera.value
   const scale = Math.max(cam.scale, 1e-6)
