@@ -2,7 +2,7 @@
   <section class="matheshop-settings">
     <header class="matheshop-settings__header">
       <h2>Matheshop 设置</h2>
-      <p>渲染层使用 Vue3，工作台由 main-ui 提供，视口由 viewport-2d-kit 驱动。</p>
+      <p>渲染层使用 Vue3，工作台由 main-ui 提供，视口由 @main-ui/core 渲染基座驱动。</p>
     </header>
 
     <div class="matheshop-settings__group">

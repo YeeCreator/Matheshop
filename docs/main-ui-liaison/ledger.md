@@ -9,9 +9,13 @@
 ## 待办
 
 - [ ] KaTeX × view-2d 联合设计（已并入 2026-10-03 反馈信，等待 main-ui 回信裁决方案 A/B/C）
-- [ ] main-ui 官方画布模板（view-canvas）就绪后，移除 flow-graph-kit-vue 依赖并回信落地报告
 
 ## 工作日志
+
+### 2026-10-07
+- 环境变化：`../flow-graph-kit` 与 `../viewport-2d-kit` 仓库已从磁盘删除；viewport-2d-kit 相机/交互数学被 `@main-ui/core/rendering` 吸收，`@main-ui/view-2d` 从 main-ui 包中移除，`pnpm install` 因此硬错误
+- 被迫提前执行本地壳化（原计划等 main-ui 官方模板）：新增 `src/components/canvas/MatheshopCanvasSurface.vue`（基于 @main-ui/core/rendering 的 DOM 画布壳 + SVG 连线层），删除 flow-graph-kit-vue / viewport-2d-kit / @main-ui/view-2d 依赖、flowGraphKitAdapter.ts 及 vite/tsconfig 死路径
+- 验证：install ✅ | tsc -b ✅ | test 7/7 ✅ | vite build ✅；2026-10-03 反馈信中 §5 验收承诺的前半（删依赖）已提前达成，待官方模板就绪后可替换本地壳
 
 ### 2026-10-03
 - 修正批次 4「短期保留 flow-graph-kit-vue」结论：决定彻底移除，改由 main-ui 承接

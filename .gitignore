@@ -1110,3 +1110,7 @@ docs/mailbox/relay/
 .env
 .env.local
 .env.*.local
+
+# 联合体治理：机器生成的导航附件，仅含本机绝对路径，不入库（2026-10-08）
+WORKSPACE_GUIDE.md
+WORKSPACE_GUIDE.local.md

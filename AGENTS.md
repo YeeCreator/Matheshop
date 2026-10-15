@@ -13,7 +13,7 @@
 ## 项目概况
 
 - 名称：matheshop（数学画布宿主，工程轨前端）
-- 技术栈：flow-graph-kit-vue + katex + viewport-2d-kit + Electron
+- 技术栈：@main-ui/core 渲染基座 + katex + Electron（flow-graph-kit-vue 与 viewport-2d-kit 已于 2026-10-07 移除，画布壳本地化为 src/components/canvas/MatheshopCanvasSurface.vue）
 - main-ui 依赖：^0.6.0
 - 构建：`tsc -b && vite build`
 - 后端依赖：MathEngine（`../MathEngine`）是统一数学后端。内嵌引擎 `engine/SymbolicComputationEngine`（Python）与 `engine/engine_ts`（TS）已标记 deprecated，迁移方向为调用 MathEngine API（`mathengine/symbolic` 重写 + `mathengine/proof` 校验）。前端纪律：只消费 Presentation-AST 子集（cell.content + frozen 标记 + 占位符 id），不触碰 E-graph 内部；详见 `docs/DEVELOPER_GUIDE.md` 第 8 节。
@@ -25,6 +25,6 @@
 |---|---|---|
 | 工程轨·前端（本项目） | `./`（本项目） | `Engs_notebook/Projects/数学工坊`（统一工程笔记，含前端+后端） |
 | 工程轨·后端 | `../MathEngine` | `Engs_notebook/Projects/数学工坊`（同上） |
-| 学术轨·研究 | `EntelechySystem/EntelechySystem/MathEngineResearch`（宿主仓库 `../EntelechySystem`） | `ES_notebook/Projects/数学引擎`（学术探索笔记） |
+| 学术轨·研究 | `EntelechySystem/EntelechySystem/MathEngineResearch`（宿主仓库 `../EntelechySystem`） | `Math_notebook/Projects/数学引擎`（学术探索笔记） |
 
 > 笔记根：Engs=`<笔记库>/Engs_notebook`，ES=`<笔记库>/ES_notebook`。工程笔记目录名为**数学工坊**（早期文档误记 Matheshop，磁盘无此目录）；学术笔记目录名为**数学引擎**。完整命名消歧表见 `../MathEngine/AGENTS.md`。
