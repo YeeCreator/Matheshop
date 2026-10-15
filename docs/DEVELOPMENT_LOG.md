@@ -2,6 +2,45 @@
 
 > 规则：每次新增功能/改动/修复错误，在校验与完工时把变动追加到本日志，并同步更新相关开发者文档/用户文档/README（如适用）。
 
+## 2026-10-15 · 多粒度草图与交互联动（UHW 联合开发 P0/P1）+ 循环依赖修复
+
+**来源**：UHW 决策席 `tasks/task-多粒度草图与交互联动数理模型联合开发-20261010-001`（契约1–契约4，P0 冻结于该文 §3.1）。开发形态 = M1（UHW 会话内跨仓就地改）。
+
+### T1 带类型知识本体地基（`d6cd579`）
+
+- `matheshopTypes.ts`：新增 `CellKind`（11 值：Definition/Axiom/Lemma/Theorem/Corollary/Proof/Example/CounterExample/Exercise/ConceptSketch/VisualModel）、`EdgeKind`（12 值：契约2 枚举）、`ConceptShape`（6 值）、`ConceptIconBlock`；`MatheshopCell` 增 `kind?` + `density?`（0..1 视图层元属性），`MatheshopEdge` 增 `kind?` + `label?`；`CellBlock` 增第三态 `ConceptIconBlock`。
+- `boardCore.ts`：`createCell` 支持 `kind`；新增 `setCellKind` / `setEdgeKind` / `setCellDensity`。
+- `blocks.ts`：`renderBlocksToHtml` 支持 `conceptIcon`；新增 `renderConceptIcon`（6 种极简线稿：矩阵网格/网络点线/三维坐标/右手定则/定义域圆环/通用）。
+- `whiteboardFiles.ts`：持久化 **`v1 → v2` 一次性迁移**（新键 `matheshop:whiteboards:v2`，读旧键补默认、写新键删旧键，按兼容策略铁律**不留双读兜底**）。
+
+### T2 连续语义粒度轴（`37bde99`）
+
+- Inspector 增「类型」下拉（11 种 `CellKind`）与「语义密度」数值（0..1，步长 0.1）。
+- 渲染层按 `density` 分档：`< 0.5` 只显**概念象形图标**（类型驱动默认形态），`≥ 0.5` 显完整 LaTeX；**底层草图永久保留**。
+
+### T4 矩阵↔网络双视图数据同源联动（`41fe37b`）
+
+- `src/core/relationData.ts`：契约3 数据单源投影 —— `projectMatrix` / `projectNetwork` / `highlightFor`（行＝出邻域、列＝入邻域、节点＝双向）/ `toTableRows`；**纯函数无渲染**。
+- `src/components/canvas/MatheshopRelationLinkage.vue`：矩阵视图 + SVG 网络视图，**双向联动高亮** + 边标签；数据经 Props 注入、不发网络请求。
+- Canonical 编辑器：Inspector 加「联动样板」开关，挂 mock 关系数据（待 ME 就绪后切真实源）。
+- 单测 `relationData.spec.ts` 9 项。
+
+### T5 全局符号表 + 公式内变量联动（`3d86eef`）
+
+- `src/core/symbolTable.ts`：契约4 符号登记（唯一 id + 别名 + 作用域）+ 订阅；`deriveAnchors()` 由公式与符号表推导锚点；单测 9 项。
+- `src/components/canvas/MatheshopSymbolPanel.ts`：侧栏符号表，支持 `highlight` 滚动定位。
+- 接入 **`@main-ui/view-formula`**（MUI 新建包）：公式变量悬停/点击 → 符号表高亮。
+
+### 修复：打破 workbench ↔ 编辑器组件循环依赖（`4be4331`）
+
+- 现象：dev 模式 `ReferenceError: Cannot access 'MatheshopCanvasEditor' before initialization`（TDZ）。
+- 根因：`core/workbench.ts` → `vue/*.vue` → `core/workbench.ts` 的**既有循环**（T1 落盘后触发求值顺序变化）。
+- 修复：抽出**叶子模块** `src/core/workbenchConstants.ts`（常量 + 引擎选项，**不 import 任何组件**）；`workbench.ts` 改为取用并再导出（对外 import 面不变）；两个编辑器组件改从叶子模块导入。
+
+验证：`tsc -b` ✅ · `vitest run` **21/21** ✅ · `vite build` ✅ · 浏览器实测（粒度轴降至 0 → 概念图标；矩阵点行 0 → 网络同步高亮 1 行/2 格/3 节点/2 边 + 标签「0→1：强影响」；公式 A/x/b 正确锚定 → 点击 → 符号表高亮）。
+
+文档：更新 `docs/DEVELOPER_GUIDE.md`（core 模块清单补 `relationData` / `symbolTable` / `workbenchConstants`；新增 §9 知识本体与粒度轴、§10 联动样板与符号表）。
+
 ## 2026-08-24
 
 ### 适配：升级到 main-ui 0.1.0，接入 settings / command / keybinding 体系
