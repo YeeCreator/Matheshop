@@ -86,9 +86,19 @@
         <h2>联动样板（T4）</h2>
         <label class="matheshop-linkage-toggle">
           <input type="checkbox" :checked="showLinkageDemo" @change="toggleLinkageDemo" />
-          <span>显示矩阵↔网络联动（mock 数据）</span>
+          <span>显示矩阵↔网络联动（C3 真实数据 · 可离线）</span>
         </label>
-        <MatheshopRelationLinkage v-if="showLinkageDemo" :relations="MOCK_RELATIONS" />
+        <div v-if="showLinkageDemo" class="matheshop-linkage-actions">
+          <button type="button" :disabled="linkageLoading" @click="loadRenderableFromEngine">
+            {{ linkageLoading ? '取数中…' : '从 MathEngine 取数' }}
+          </button>
+          <span class="matheshop-linkage-toggle__note">{{ linkageNote }}</span>
+        </div>
+        <MatheshopRelationLinkage
+          v-if="showLinkageDemo"
+          :relations="linkageRelations"
+          :source-label="linkageSource"
+        />
 
         <SymbolPanel :highlight-id="highlightSymbolId" />
         <label class="matheshop-linkage-toggle">
@@ -122,6 +132,7 @@ import { renderBlocksToHtml, renderConceptIcon } from '../core/blocks'
 import type { MatheshopBoardCore, MatheshopBoardSnapshot } from '../core/boardCore'
 import type { CellKind, ConceptShape, MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
 import type { RelationDatum } from '../core/relationData'
+import { fetchRenderableStructure } from '../engine/renderableClient'
 import { deriveAnchors, matheshopSymbols } from '../core/symbolTable'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
@@ -136,7 +147,7 @@ const toggleLinkageDemo = (event: Event) => {
   showLinkageDemo.value = (event.target as HTMLInputElement).checked
 }
 
-/** 契约3 mock 关系数据：4 个体、6 条有向关系（示范双向联动）。 */
+/** 契约3 mock 关系数据：4 个体、6 条有向关系（示范双向联动；ME 不可达时回退用）。 */
 const MOCK_RELATIONS: RelationDatum[] = [
   { i: 0, j: 1, weight: 2, label: '强影响' },
   { i: 0, j: 2, weight: 1 },
@@ -145,6 +156,39 @@ const MOCK_RELATIONS: RelationDatum[] = [
   { i: 2, j: 3, weight: 2 },
   { i: 3, j: 1, weight: 1, label: '弱影响' },
 ]
+
+/** C3 数据源状态：ME 真实数据优先，不可达时保持当前数据并如实标注。 */
+const linkageRelations = ref<RelationDatum[]>(MOCK_RELATIONS)
+const linkageSource = ref('mock 数据')
+const linkageLoading = ref(false)
+const linkageNote = ref('当前为 mock；点按钮从 MathEngine 取真实数据（需 8010 服务在线）')
+
+/**
+ * 从 MathEngine 取契约3 可渲染数据（C3 链路）。
+ *
+ * 成功 → 用真实关系数据替换并标注来源；失败 → **保持当前数据不变**并显示原因
+ * （不回退到 mock，避免把已取得的真实数据覆盖掉）。
+ */
+const loadRenderableFromEngine = async () => {
+  linkageLoading.value = true
+  try {
+    const result = await fetchRenderableStructure({ numPoints: 12, kind: 'graph', seed: 7 })
+    if (result.ok) {
+      const relations = result.structure.relations
+      if (relations.length) {
+        linkageRelations.value = relations
+        linkageSource.value = `ME 真实数据（${result.structure.summary.shape} · ${relations.length} 边）`
+        linkageNote.value = `已取数：${result.structure.nodes.length} 节点 / ${relations.length} 条关系`
+      } else {
+        linkageNote.value = 'ME 返回空关系数据，保持当前数据不变'
+      }
+    } else {
+      linkageNote.value = `取数失败（${result.error.code}）：${result.error.message} —— 保持当前数据不变`
+    }
+  } finally {
+    linkageLoading.value = false
+  }
+}
 
 /** T5 公式锚点样板：符号表 + 公式内变量联动。 */
 const showFormulaDemo = ref(false)

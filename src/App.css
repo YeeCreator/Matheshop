@@ -324,3 +324,37 @@
   gap: 8px;
   margin: 8px 0;
 }
+.matheshop-linkage-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  color: var(--main-ui-text-muted);
+}
+
+.matheshop-linkage-toggle__note {
+  color: var(--main-ui-text-muted);
+  font-size: 11px;
+}
+
+.matheshop-linkage-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.matheshop-linkage-actions button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--main-ui-border);
+  border-radius: var(--main-ui-radius);
+  background: var(--main-ui-panel-muted);
+  color: var(--main-ui-text);
+  cursor: pointer;
+}
+
+.matheshop-linkage-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

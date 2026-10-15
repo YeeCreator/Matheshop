@@ -3,6 +3,7 @@
     <header class="matheshop-linkage__bar">
       <strong>矩阵 ↔ 网络联动</strong>
       <span class="matheshop-linkage__hint">{{ focusHint }}</span>
+      <span v-if="sourceLabel" class="matheshop-linkage__source">{{ sourceLabel }}</span>
       <button type="button" :disabled="!focus" @click="clearFocus">清除高亮</button>
     </header>
 
@@ -91,7 +92,7 @@
  *
  * 底层为**同一份关系数据** `{ i, j, weight, label }`，投影为两种视图：
  * 矩阵（代数视角）与网络图（拓扑视角），**双向联动高亮**。
- * 数据经 Props 注入（宿主可先给 mock，待 ME 就绪后切真实数据）；本组件不发网络请求。
+ * 数据经 Props 注入（宿主可先给 mock，也可给 ME 真实数据）；本组件不发网络请求。
  */
 import { computed, ref, toRef } from 'vue'
 import {
@@ -104,6 +105,8 @@ import {
 const props = defineProps<{
   /** 契约3 关系数据单源。 */
   relations: RelationDatum[]
+  /** 数据来源标注（如「ME 真实数据」/「mock 数据」）；缺省不显示。 */
+  sourceLabel?: string
 }>()
 
 const relations = toRef(props, 'relations')
@@ -167,6 +170,7 @@ const focusEdgeLabels = computed(() =>
 .matheshop-linkage { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
 .matheshop-linkage__bar { display: flex; align-items: center; gap: 8px; }
 .matheshop-linkage__hint { color: #6b6a5e; }
+.matheshop-linkage__source { color: #8b6d2b; background: #fdf4d8; border-radius: 4px; padding: 1px 6px; }
 .matheshop-linkage__panes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .matheshop-linkage__pane { border: 1px solid #e4e2d4; border-radius: 6px; padding: 8px; }
 .matheshop-linkage__note { margin: 2px 0 6px; color: #8b846b; font-size: 11px; }
