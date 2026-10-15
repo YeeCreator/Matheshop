@@ -1,5 +1,5 @@
 <template>
-  <FlowGraphEditorSurface :document="graphDocument" :view-box="viewBox">
+  <MatheshopCanvasSurface :cells="surfaceCells" :edges="surfaceEdges" :view-box="viewBox">
     <template #left>
       <div class="matheshop-side-content">
         <h2>工具</h2>
@@ -84,7 +84,7 @@
         />
       </div>
     </template>
-  </FlowGraphEditorSurface>
+  </MatheshopCanvasSurface>
 </template>
 
 <script setup lang="ts">
@@ -93,13 +93,11 @@ import type { EditorRenderContext } from 'main-ui/core'
 import { useWorkbench } from 'main-ui/vue'
 import { InspectorView, type InspectorSchema, type InspectorChangePayload } from '@main-ui/view-inspector'
 import { ConsoleView, type ConsoleEntry } from '@main-ui/view-console'
-import type { Viewport2DCamera } from 'viewport-2d-kit/core'
-import type { ViewportHostBridge } from 'viewport-2d-kit/vue'
-import { FlowGraphEditorSurface } from 'flow-graph-kit-vue'
-import { renderBlocksToHtml } from '../core/blocks'
+import type { Camera2D } from '@main-ui/core/rendering'
+import MatheshopCanvasSurface, { type CanvasBridge } from '../components/canvas/MatheshopCanvasSurface.vue'
+import { renderBlocksToHtml, renderConceptIcon } from '../core/blocks'
 import type { MatheshopBoardCore, MatheshopBoardSnapshot } from '../core/boardCore'
-import type { MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
-import { createMatheshopGraphEditorDocument } from '../adapters/flowGraphKitAdapter'
+import type { CellKind, ConceptShape, MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
 import { MATHESHOP_ENGINE_CHOICES } from '../core/workbench'
@@ -115,11 +113,18 @@ const resolveWhiteboardFileId = (context: EditorRenderContext) => {
 const activeBoard = shallowRef<MatheshopBoardCore>(matheshopWhiteboardFiles.getBoard(resolveWhiteboardFileId(props.context)))
 const snapshot = shallowRef<MatheshopBoardSnapshot>(activeBoard.value.getSnapshot())
 const viewBox = { x: 0, y: 0, width: 2200, height: 1400 }
-const graphDocument = computed(() => createMatheshopGraphEditorDocument(snapshot.value))
+const surfaceCells = computed(() => snapshot.value.cells.map((cell) => ({
+  id: cell.id,
+  x: cell.position.x,
+  y: cell.position.y,
+  width: cell.size.w,
+  height: cell.size.h,
+})))
+const surfaceEdges = computed(() => snapshot.value.edges.map((edge) => ({ id: edge.id, source: edge.from, target: edge.to })))
 
 let unsubscribe: (() => void) | null = null
-let dragState: null | { id: string; startClient: Vec2; startPosition: Vec2; bridge: ViewportHostBridge; camera: Viewport2DCamera } = null
-let resizeState: null | { id: string; startClient: Vec2; startSize: { w: number; h: number }; bridge: ViewportHostBridge; camera: Viewport2DCamera } = null
+let dragState: null | { id: string; startClient: Vec2; startPosition: Vec2; bridge: CanvasBridge; camera: Camera2D } = null
+let resizeState: null | { id: string; startClient: Vec2; startSize: { w: number; h: number }; bridge: CanvasBridge; camera: Camera2D } = null
 
 const selectedCell = computed(() => snapshot.value.cells.find((cell) => cell.id === snapshot.value.selectedCellId) ?? null)
 const historyText = computed(() => snapshot.value.history.length === 0 ? '暂无' : snapshot.value.history.map((entry) => entry.label).join('\n'))
@@ -137,6 +142,16 @@ const historyEntries = computed<ConsoleEntry[]>(() =>
 /** view-inspector schema：单元框属性检视字段（FR-452）。 */
 const inspectorSchema: InspectorSchema = [
   { kind: 'number', key: 'seq', label: '序号', min: 1, step: 1 },
+  {
+    kind: 'select',
+    key: 'kind',
+    label: '类型',
+    options: [
+      { value: '', label: '（无）' },
+      ...CONCEPT_KIND_OPTIONS.map((k) => ({ value: k, label: k })),
+    ],
+  },
+  { kind: 'number', key: 'density', label: '语义密度', min: 0, max: 1, step: 0.1 },
   { kind: 'number', key: 'posX', label: '位置 X', step: 1 },
   { kind: 'number', key: 'posY', label: '位置 Y', step: 1 },
   { kind: 'number', key: 'sizeW', label: '宽度', min: 120, step: 1 },
@@ -145,12 +160,20 @@ const inspectorSchema: InspectorSchema = [
   { kind: 'select', key: 'engine', label: '引擎', options: MATHESHOP_ENGINE_CHOICES.map((c) => ({ value: c.value, label: c.label })) },
 ]
 
+/** 契约1 · 可选知识单元类型（Inspector 下拉项）。 */
+const CONCEPT_KIND_OPTIONS: CellKind[] = [
+  'Definition', 'Axiom', 'Lemma', 'Theorem', 'Corollary', 'Proof',
+  'Example', 'CounterExample', 'Exercise', 'ConceptSketch', 'VisualModel',
+]
+
 /** 从选中单元框派生 Inspector 受控值表。 */
 const inspectorValues = computed(() => {
   const cell = selectedCell.value
   if (!cell) return null
   return {
     seq: cell.seq,
+    kind: cell.kind ?? '',
+    density: cell.density ?? 1,
     posX: Math.round(cell.position.x),
     posY: Math.round(cell.position.y),
     sizeW: Math.round(cell.size.w),
@@ -165,6 +188,12 @@ const onInspectorChange = ({ key, value }: InspectorChangePayload) => {
   const cell = selectedCell.value
   if (!cell) return
   switch (key) {
+    case 'kind':
+      activeBoard.value.setCellKind(cell.id, (value as string) === '' ? undefined : (value as CellKind))
+      break
+    case 'density':
+      activeBoard.value.setCellDensity(cell.id, value as number)
+      break
     case 'posX':
       activeBoard.value.moveCell(cell.id, { x: value as number, y: cell.position.y })
       break
@@ -196,7 +225,33 @@ const connectBoard = (fileId: string) => {
   })
 }
 
-const renderCell = (cell: MatheshopCell) => renderBlocksToHtml(cell.blocks)
+const renderCell = (cell: MatheshopCell) => {
+  const density = cell.density ?? 1
+  // 契约1 契约1 · 粒度轴：低密度（<0.5）只显概念象形图标，隐藏公式细节。
+  if (density < 0.5) {
+    const shape = CONCEPT_SHAPE_BY_KIND[cell.kind ?? 'ConceptSketch'] ?? 'generic'
+    const icon = cell.blocks.find((block) => block.type === 'conceptIcon')
+    return renderConceptIcon(
+      icon && icon.type === 'conceptIcon' ? icon : { id: `icon-${cell.id}`, type: 'conceptIcon', shape },
+    )
+  }
+  return renderBlocksToHtml(cell.blocks)
+}
+
+/** 契约1 · 知识单元类型 → 概念象形图标形态（形态只表类别）。 */
+const CONCEPT_SHAPE_BY_KIND: Record<CellKind, ConceptShape> = {
+  Definition: 'domain',
+  Axiom: 'generic',
+  Lemma: 'generic',
+  Theorem: 'generic',
+  Corollary: 'generic',
+  Proof: 'generic',
+  Example: 'network',
+  CounterExample: 'network',
+  Exercise: 'generic',
+  ConceptSketch: 'generic',
+  VisualModel: 'matrix',
+}
 
 const cellStyle = (cell: MatheshopCell) => ({
   left: `${cell.position.x}px`,
@@ -211,7 +266,7 @@ const cellClass = (cellId: string) => ({
   'is-link-source': snapshot.value.linkFromCellId === cellId,
 })
 
-const onCanvasDoubleClick = (event: MouseEvent, camera: Viewport2DCamera, bridge: ViewportHostBridge) => {
+const onCanvasDoubleClick = (event: MouseEvent, camera: Camera2D, bridge: CanvasBridge) => {
   const world = bridge.clientEventToWorld(camera, event)
   activeBoard.value.addCell({ x: world.x - 120, y: world.y - 56 })
   void nextTick(() => focusActiveEditor())
@@ -232,7 +287,7 @@ const focusActiveEditor = () => {
   editor?.select()
 }
 
-const onCellPointerDown = (event: PointerEvent, cell: MatheshopCell, camera: Viewport2DCamera, bridge: ViewportHostBridge) => {
+const onCellPointerDown = (event: PointerEvent, cell: MatheshopCell, camera: Camera2D, bridge: CanvasBridge) => {
   if (event.button !== 0 || snapshot.value.editingCellId === cell.id || snapshot.value.linkMode) return
   activeBoard.value.selectCell(cell.id)
   dragState = {
@@ -246,7 +301,7 @@ const onCellPointerDown = (event: PointerEvent, cell: MatheshopCell, camera: Vie
   window.addEventListener('pointerup', onWindowPointerUp, { once: true })
 }
 
-const onResizePointerDown = (event: PointerEvent, cell: MatheshopCell, camera: Viewport2DCamera, bridge: ViewportHostBridge) => {
+const onResizePointerDown = (event: PointerEvent, cell: MatheshopCell, camera: Camera2D, bridge: CanvasBridge) => {
   resizeState = {
     id: cell.id,
     startClient: { x: event.clientX, y: event.clientY },
