@@ -7,9 +7,9 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "dev:deps": "concurrently -k --raw -n FGKVIEW,VIEWPORT,UI,APP \"pnpm -C ../flow-graph-kit/frontend/flow-graph-kit-vue dev\" \"pnpm -C ../viewport-2d-kit dev\" \"pnpm -C ../main-ui dev\" \"pnpm dev\"",
+    "dev:deps": "concurrently -k --raw -n UI,APP \"pnpm -C ../main-ui dev\" \"pnpm dev\"",
     "build": "pnpm build:deps && tsc -b && vite build",
-    "build:deps": "pnpm -C ../main-ui build && pnpm -C ../viewport-2d-kit build && pnpm -C ../flow-graph-kit/frontend/flow-graph-kit-vue build",
+    "build:deps": "pnpm -C ../main-ui build",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
@@ -21,12 +21,10 @@
     "@main-ui/view-console": "workspace:*",
     "@main-ui/view-inspector": "workspace:*",
     "@main-ui/view-table": "workspace:*",
-    "@main-ui/view-2d": "workspace:*",
-    "flow-graph-kit-vue": "link:../flow-graph-kit/frontend/flow-graph-kit-vue",
+    "@main-ui/view-formula": "workspace:*",
     "katex": "^0.16.27",
     "main-ui": "workspace:^0.6.0",
-    "vue": "^3.5.0",
-    "viewport-2d-kit": "link:../viewport-2d-kit"
+    "vue": "^3.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

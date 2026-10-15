@@ -89,6 +89,19 @@
           <span>显示矩阵↔网络联动（mock 数据）</span>
         </label>
         <MatheshopRelationLinkage v-if="showLinkageDemo" :relations="MOCK_RELATIONS" />
+
+        <SymbolPanel :highlight-id="highlightSymbolId" />
+        <label class="matheshop-linkage-toggle">
+          <input type="checkbox" :checked="showFormulaDemo" @change="toggleFormulaDemo" />
+          <span>显示公式锚点（T5 · 点变量查符号表）</span>
+        </label>
+        <FormulaView
+          v-if="showFormulaDemo"
+          :latex="FORMULA_DEMO"
+          :anchors="formulaAnchors"
+          @anchor-hover="onAnchorHover"
+          @anchor-click="onAnchorClick"
+        />
       </div>
     </template>
   </MatheshopCanvasSurface>
@@ -103,10 +116,13 @@ import { ConsoleView, type ConsoleEntry } from '@main-ui/view-console'
 import type { Camera2D } from '@main-ui/core/rendering'
 import MatheshopCanvasSurface, { type CanvasBridge } from '../components/canvas/MatheshopCanvasSurface.vue'
 import MatheshopRelationLinkage from '../components/canvas/MatheshopRelationLinkage.vue'
+import { SymbolPanel } from '../components/canvas/MatheshopSymbolPanel'
+import { FormulaView, type FormulaAnchorIntent } from '@main-ui/view-formula'
 import { renderBlocksToHtml, renderConceptIcon } from '../core/blocks'
 import type { MatheshopBoardCore, MatheshopBoardSnapshot } from '../core/boardCore'
 import type { CellKind, ConceptShape, MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
 import type { RelationDatum } from '../core/relationData'
+import { deriveAnchors, matheshopSymbols } from '../core/symbolTable'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
 import { MATHESHOP_ENGINE_CHOICES } from '../core/workbenchConstants'
@@ -129,6 +145,31 @@ const MOCK_RELATIONS: RelationDatum[] = [
   { i: 2, j: 3, weight: 2 },
   { i: 3, j: 1, weight: 1, label: '弱影响' },
 ]
+
+/** T5 公式锚点样板：符号表 + 公式内变量联动。 */
+const showFormulaDemo = ref(false)
+const highlightSymbolId = ref<string | null>(null)
+const FORMULA_DEMO = 'A_{ij} = \\sum_{k} x_k \\cdot b_j'
+const toggleFormulaDemo = (event: Event) => {
+  showFormulaDemo.value = (event.target as HTMLInputElement).checked
+}
+
+/** 预置符号（mock；对齐契约4 的 id/别名/作用域三要素）。 */
+matheshopSymbols.replaceAll([
+  { id: 'sym:A', name: 'A', aliases: ['adjacency', '邻接矩阵'], scope: 'global', description: '邻接矩阵：a_ij 表示 i→j 的影响' },
+  { id: 'sym:x', name: 'x', aliases: ['变量 x'], scope: 'global', description: '自变量' },
+  { id: 'sym:b', name: 'b', aliases: ['偏置'], scope: 'global', description: '偏置项' },
+])
+
+const formulaAnchors = computed(() => deriveAnchors(FORMULA_DEMO, matheshopSymbols))
+const onAnchorHover = (intent: FormulaAnchorIntent) => {
+  highlightSymbolId.value = intent.symbolId
+}
+const onAnchorClick = (intent: FormulaAnchorIntent) => {
+  highlightSymbolId.value = intent.symbolId
+  const entry = matheshopSymbols.find(intent.symbolId)
+  console.info('[T5] 公式变量命中符号：', entry?.name ?? intent.name, '→', intent.symbolId)
+}
 
 const resolveWhiteboardFileId = (context: EditorRenderContext) => {
   const fileId = context.editor.payload?.whiteboardFileId
