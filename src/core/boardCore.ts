@@ -2,6 +2,7 @@ import { evalExpression } from '../engine/engineClient'
 import { processCnl as requestCnlProcess, type CnlExportKey, type CnlUnit } from '../engine/cnlEngineClient'
 import { DEFAULT_ENGINE_SELECTION, loadEngineSelection, saveEngineSelection, type EngineChoice, type EngineSelectionState } from '../engine/engineSelection'
 import { parseBlocksFromText } from './blocks'
+import { asMiniCanvas, deriveSubBoardRef, type SubBoardRef } from './miniCanvas'
 import type { CellBlock, CellId, CellKind, DerivationStatus, EdgeId, EdgeKind, FrozenMark, MatheshopCell, MatheshopEdge, MatheshopHistoryEntry, MatheshopTool, Size, Vec2 } from './matheshopTypes'
 
 export type CnlBoardResult =
@@ -42,6 +43,8 @@ const cloneCell = (cell: MatheshopCell): MatheshopCell => ({
   position: { ...cell.position },
   size: { ...cell.size },
   blocks: cloneBlocks(cell.blocks),
+  // T3：子画布引用须深拷，避免跨快照共享同一对象。
+  ...(cell.subBoard ? { subBoard: { ...cell.subBoard } } : {}),
 })
 
 const cloneSnapshot = (snapshot: MatheshopBoardSnapshot): MatheshopBoardSnapshot => ({
@@ -323,6 +326,45 @@ export class MatheshopBoardCore {
     const clamped = Math.min(1, Math.max(0, density))
     const cells = this.snapshot.cells.map((cell) => (cell.id === cellId ? { ...cell, density: clamped } : cell))
     this.setSnapshot({ ...this.snapshot, cells, statusMessage: `粒度已设为 ${clamped.toFixed(2)}。` })
+  }
+
+  /**
+   * T3 创建便签 cell（内嵌子画布）。
+   *
+   * **不**在此创建子画布本身（那由 whiteboardFiles 负责）；本方法只落引用，
+   * 保证 boardCore 的扁平快照结构不被递归化。
+   *
+   * @param position 世界坐标位置。
+   * @param subBoardId 子画布对应的白板记录 id。
+   * @param parent 父层便签引用（主画布传 null）。
+   * @returns 新建的便签 cell。
+   */
+  addMiniCanvasCell(position: Vec2, subBoardId: string, parent: SubBoardRef | null = null): MatheshopCell {
+    const cell = createCell({ seq: this.nextSeq, position, color: this.snapshot.color, content: '', kind: 'MiniCanvas' })
+    this.nextSeq += 1
+    const withRef: MatheshopCell = { ...cell, subBoard: deriveSubBoardRef(subBoardId, parent) } as MatheshopCell
+    this.setSnapshot({
+      ...this.snapshot,
+      cells: [...this.snapshot.cells, withRef],
+      selectedCellId: withRef.id,
+      history: [this.createHistory('创建便签（内嵌子画布）'), ...this.snapshot.history].slice(0, 40),
+      statusMessage: '已创建便签。',
+    })
+    return withRef
+  }
+
+  /**
+   * T3 切换便签视图态（缩略 ↔ 展开）；属视图层，不入对象层。
+   *
+   * @param cellId 便签 cell id。
+   * @param view 目标视图态。
+   */
+  setMiniCanvasView(cellId: CellId, view: SubBoardRef['view']): void {
+    const cells = this.snapshot.cells.map((cell) => {
+      const ref = asMiniCanvas(cell)
+      return ref && cell.id === cellId ? ({ ...cell, subBoard: { ...ref, view } } as MatheshopCell) : cell
+    })
+    this.setSnapshot({ ...this.snapshot, cells, statusMessage: view === 'expanded' ? '便签已展开。' : '便签已收起。' })
   }
 
   async evaluateSelected(): Promise<void> {

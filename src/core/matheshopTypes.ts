@@ -1,3 +1,5 @@
+import type { SubBoardRef } from './miniCanvas'
+
 export type Vec2 = { x: number; y: number }
 
 export type Size = { w: number; h: number }
@@ -60,6 +62,7 @@ export type CellKind =
   | 'Exercise'
   | 'ConceptSketch'
   | 'VisualModel'
+  | 'MiniCanvas'
 
 /** 契约2 · 语义关系边类型（12 值，与学术轨 IR 边类型同源命名）。 */
 export type EdgeKind =
@@ -95,6 +98,11 @@ export type MatheshopCell = {
    * 低密度≈概念象形图标，高密度≈完整 LaTeX。不入对象层 IR，导出不泄露。
    */
   density?: number
+  /**
+   * T3 子画布引用：仅当 `kind === 'MiniCanvas'` 时存在。
+   * **只存 id 引用**（子画布是独立白板记录），避免快照递归化。
+   */
+  subBoard?: SubBoardRef
 }
 
 export type MatheshopEdge = {
