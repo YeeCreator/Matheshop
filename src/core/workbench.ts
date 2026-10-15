@@ -10,31 +10,45 @@ import { cnlConsole } from './cnlConsole'
 import { createMatheshopSettingsPersistenceAdapter } from './settingsPersistence'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommand } from './boardCommands'
 import { loadEngineSelection, type EngineChoice } from '../engine/engineSelection'
+import {
+  MATHESHOP_ANALYSIS_EDITOR_KIND,
+  MATHESHOP_ANALYSIS_RENDERER_KEY,
+  MATHESHOP_ANALYSIS_WORKSPACE_ID,
+  MATHESHOP_CANVAS_EDITOR_KIND,
+  MATHESHOP_CANVAS_GROUP_ID,
+  MATHESHOP_CANVAS_RENDERER_KEY,
+  MATHESHOP_CANVAS_WORKSPACE_ID,
+  MATHESHOP_CNL_EDITOR_KIND,
+  MATHESHOP_CNL_RENDERER_KEY,
+  MATHESHOP_CNL_WORKSPACE_ID,
+  MATHESHOP_ENGINE_CHOICE_SETTING_ID,
+  MATHESHOP_ENGINE_CHOICES,
+  MATHESHOP_FILES_EDITOR_KIND,
+  MATHESHOP_FILES_RENDERER_KEY,
+  MATHESHOP_FILES_WORKSPACE_ID,
+  MATHESHOP_SETTINGS_EDITOR_KIND,
+  MATHESHOP_SETTINGS_RENDERER_KEY,
+} from './workbenchConstants'
 
-export const MATHESHOP_CANVAS_WORKSPACE_ID = 'matheshop.workspace.canvas'
-export const MATHESHOP_FILES_WORKSPACE_ID = 'matheshop.workspace.files'
-export const MATHESHOP_ANALYSIS_WORKSPACE_ID = 'matheshop.workspace.analysis'
-export const MATHESHOP_CANVAS_EDITOR_KIND = 'matheshop.canvas'
-export const MATHESHOP_FILES_EDITOR_KIND = 'matheshop.files'
-export const MATHESHOP_ANALYSIS_EDITOR_KIND = 'matheshop.analysis'
-export const MATHESHOP_SETTINGS_EDITOR_KIND = 'matheshop.settings'
-export const MATHESHOP_CANVAS_RENDERER_KEY = 'matheshop.renderer.canvas'
-export const MATHESHOP_FILES_RENDERER_KEY = 'matheshop.renderer.files'
-export const MATHESHOP_ANALYSIS_RENDERER_KEY = 'matheshop.renderer.analysis'
-export const MATHESHOP_SETTINGS_RENDERER_KEY = 'matheshop.renderer.settings'
-export const MATHESHOP_CNL_WORKSPACE_ID = 'matheshop.workspace.cnl'
-export const MATHESHOP_CNL_EDITOR_KIND = 'matheshop.cnl'
-export const MATHESHOP_CNL_RENDERER_KEY = 'matheshop.renderer.cnl'
-export const MATHESHOP_CANVAS_GROUP_ID = 'matheshop-group-main'
-
-export const MATHESHOP_ENGINE_CHOICE_SETTING_ID = 'matheshop.engineChoice'
-
-/** 供 setting schema 与设置面板共用的引擎选项清单。 */
-export const MATHESHOP_ENGINE_CHOICES: Array<{ value: EngineChoice; label: string }> = [
-  { value: 'builtin_python', label: '内置 Python 高性能计算后台' },
-  { value: 'builtin_native', label: '浏览器 TypeScript 轻量后备' },
-  { value: 'external', label: '外接计算引擎占位' },
-]
+export {
+  MATHESHOP_CANVAS_WORKSPACE_ID,
+  MATHESHOP_FILES_WORKSPACE_ID,
+  MATHESHOP_ANALYSIS_WORKSPACE_ID,
+  MATHESHOP_CANVAS_EDITOR_KIND,
+  MATHESHOP_FILES_EDITOR_KIND,
+  MATHESHOP_ANALYSIS_EDITOR_KIND,
+  MATHESHOP_SETTINGS_EDITOR_KIND,
+  MATHESHOP_CANVAS_RENDERER_KEY,
+  MATHESHOP_FILES_RENDERER_KEY,
+  MATHESHOP_ANALYSIS_RENDERER_KEY,
+  MATHESHOP_SETTINGS_RENDERER_KEY,
+  MATHESHOP_CNL_WORKSPACE_ID,
+  MATHESHOP_CNL_EDITOR_KIND,
+  MATHESHOP_CNL_RENDERER_KEY,
+  MATHESHOP_CANVAS_GROUP_ID,
+  MATHESHOP_ENGINE_CHOICE_SETTING_ID,
+  MATHESHOP_ENGINE_CHOICES,
+} from './workbenchConstants'
 
 const bootstrapWhiteboard = matheshopWhiteboardFiles.ensureBootstrapFile()
 

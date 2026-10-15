@@ -24,7 +24,7 @@
 import { computed, onBeforeUnmount, onMounted, shallowRef } from 'vue'
 import { useWorkbench } from 'main-ui/vue'
 import { TableView, type TableColumn, type TableRow } from '@main-ui/view-table'
-import { MATHESHOP_CANVAS_EDITOR_KIND, MATHESHOP_CANVAS_GROUP_ID, MATHESHOP_CANVAS_WORKSPACE_ID } from '../core/workbench'
+import { MATHESHOP_CANVAS_EDITOR_KIND, MATHESHOP_CANVAS_GROUP_ID, MATHESHOP_CANVAS_WORKSPACE_ID } from '../core/workbenchConstants'
 import { matheshopWhiteboardFiles, type MatheshopWhiteboardFileSummary } from '../core/whiteboardFiles'
 
 const { dispatch, document } = useWorkbench()
