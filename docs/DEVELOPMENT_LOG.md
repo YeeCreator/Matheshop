@@ -2,6 +2,32 @@
 
 > 规则：每次新增功能/改动/修复错误，在校验与完工时把变动追加到本日志，并同步更新相关开发者文档/用户文档/README（如适用）。
 
+## 2026-10-15（下）· C3 链路接通 + 官方画布模板替换本地壳（UHW 联合开发 P1/P3）
+
+**来源**：UHW 决策席 `tasks/task-多粒度草图与交互联动数理模型联合开发-20261010-001`；接力件 `task-多粒度草图与交互联动数理模型-会话接力-20261015-002`（R1 / R4）。
+
+### C3 链路接通：MathEngine 真实可渲染数据（契约3）
+
+- 新增 `src/engine/renderableClient.ts`：调 MathEngine `POST /renderable`（经 vite 代理 `/api/mathengine`，本机 8010）；请求字段与后端 `RenderableRequest` 逐字段对齐（snake_case）；错误结构化（`http_error` / `network_error` / `renderable_error`）。
+- `MatheshopCanvasEditor.vue`：联动样板的数据源由硬编码 mock 改为**可手动取数**——成功后标注来源（形态 shape + 边数）并逐条显示节点/关系计数；失败时**保持当前数据不变**（不覆盖已取得的真实数据）并显示原因。
+- `MatheshopRelationLinkage.vue`：新增 `sourceLabel` 属性显示数据来源。
+- 后端配套（ME 仓）：新增 `POST /renderable` 端点（`geometry.points` → `geometry.graphs` → `geometry.renderable`），10 项服务层测试，含硬边界关键字扫描。
+- 单测 `renderableClient.spec.ts` 7 项。
+- **浏览器实测**：12 节点 / 25 条关系真实数据渲染；点矩阵行 2 → 6 边 / 7 节点同步高亮；停掉 ME 后取数提示失败且数据不丢。
+
+### R4：官方 `@main-ui/view-canvas` 替换本地画布壳
+
+- 新增 `src/components/canvas/MatheshopBoardStage.vue`：官方模板之上的**薄适配层**——相机、指针/滚轮交互、fit、坐标桥全部改用 `ViewportCanvas` / `ViewportCanvasShell` / `buildHostBridge`；本地只保留两项专有内容（cell 间三次贝塞尔**连线层**、`#world` 世界内容插槽）。
+- **删除** `src/components/canvas/MatheshopCanvasSurface.vue`（自实现的相机数学/交互/空格平移与官方模板重复）。2026-10-07 反馈信 §5 验收承诺的后半达成。
+- 依赖：`package.json` 新增 `@main-ui/view-canvas`。
+- **行为变更（须知悉）**：平移由「空格+左键 / 中键拖拽」改为官方模板的**左键拖拽**；`docs/PRD.md` FR-003 相应表述待用户确认后再改。
+- 附带修复：`const { document } = useWorkbench()` 遮蔽全局 `document`，导致 `focusActiveEditor()` 抛 `TypeError: document.querySelector is not a function`（双击新建单元框必然触发）。重命名为 `workbenchDocument`。
+- **浏览器实测**：双击新建单元框（2→3→4）并自动聚焦编辑器；拖拽移动单元框（120,120 → 1043,582）；左键拖拽平移与滚轮缩放均生效；右面板 Inspector / 历史 / 符号表齐全；无页面错误。
+
+### 验证
+
+`tsc -b` ✅ · `vitest` 28 passed ✅ · `vite build` ✅ · 浏览器两范式实测 ✅
+
 ## 2026-10-15 · 多粒度草图与交互联动（UHW 联合开发 P0/P1）+ 循环依赖修复
 
 **来源**：UHW 决策席 `tasks/task-多粒度草图与交互联动数理模型联合开发-20261010-001`（契约1–契约4，P0 冻结于该文 §3.1）。开发形态 = M1（UHW 会话内跨仓就地改）。

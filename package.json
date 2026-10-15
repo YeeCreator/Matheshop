@@ -18,10 +18,11 @@
   },
   "dependencies": {
     "@main-ui/core": "workspace:*",
+    "@main-ui/view-canvas": "workspace:*",
     "@main-ui/view-console": "workspace:*",
+    "@main-ui/view-formula": "workspace:*",
     "@main-ui/view-inspector": "workspace:*",
     "@main-ui/view-table": "workspace:*",
-    "@main-ui/view-formula": "workspace:*",
     "katex": "^0.16.27",
     "main-ui": "workspace:^0.6.0",
     "vue": "^3.5.0"

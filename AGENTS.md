@@ -13,7 +13,7 @@
 ## 项目概况
 
 - 名称：matheshop（数学画布宿主，工程轨前端）
-- 技术栈：@main-ui/core 渲染基座 + katex + Electron（flow-graph-kit-vue 与 viewport-2d-kit 已于 2026-10-07 移除，画布壳本地化为 src/components/canvas/MatheshopCanvasSurface.vue）
+- 技术栈：@main-ui/core 渲染基座 + @main-ui/view-canvas 画布舞台 + katex + Electron（flow-graph-kit-vue 与 viewport-2d-kit 已于 2026-10-07 移除；本地画布壳 MatheshopCanvasSurface 已于 2026-10-15 退役，改用官方 view-canvas 薄适配层 src/components/canvas/MatheshopBoardStage.vue）
 - main-ui 依赖：^0.6.0
 - 构建：`tsc -b && vite build`
 - 后端依赖：MathEngine（`../MathEngine`）是统一数学后端。内嵌引擎 `engine/SymbolicComputationEngine`（Python）与 `engine/engine_ts`（TS）已标记 deprecated，迁移方向为调用 MathEngine API（`mathengine/symbolic` 重写 + `mathengine/proof` 校验）。前端纪律：只消费 Presentation-AST 子集（cell.content + frozen 标记 + 占位符 id），不触碰 E-graph 内部；详见 `docs/DEVELOPER_GUIDE.md` 第 8 节。

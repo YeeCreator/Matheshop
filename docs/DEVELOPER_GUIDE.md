@@ -28,10 +28,10 @@
   - `MatheshopCanvasEditor.vue`：渲染画布、工具栏、Inspector，并把用户事件转发给 core。
   - `MatheshopSettingsEditor.vue`：渲染引擎设置与 Python 后台信息。
 - `src/components/canvas/`：画布本地组件。
-  - `MatheshopCanvasSurface.vue`：本地画布编辑壳（相机数学基于 `@main-ui/core/rendering`）。
+  - `MatheshopBoardStage.vue`：画布舞台（官方 `@main-ui/view-canvas` 之上的薄适配层：连线层 + 世界内容插槽）。
   - `MatheshopRelationLinkage.vue`：矩阵↔网络双视图联动组件（T4 范式样板）。
   - `MatheshopSymbolPanel.ts`：全局符号表面板（T5）。
-- `src/engine/`：浏览器端引擎选择、TypeScript 后备求值、Python HTTP 客户端。
+- `src/engine/`：浏览器端引擎选择、TypeScript 后备求值、Python HTTP 客户端、契约3 可渲染数据客户端（`renderableClient.ts`）。
 - `engine/SymbolicComputationEngineServer/`：FastAPI 服务层。
 
 ## 3. main-ui 接入
@@ -48,16 +48,17 @@
 
 `main-ui` 是本地 link 依赖，构建前需要先生成其 `dist` 类型声明。`pnpm build` 已自动执行 `pnpm build:deps`。
 
-## 4. 视口/相机接入（`@main-ui/core/rendering`）
+## 4. 视口/相机接入（`@main-ui/view-canvas`）
 
-入口文件：`src/components/canvas/MatheshopCanvasSurface.vue`。
+入口文件：`src/components/canvas/MatheshopBoardStage.vue`（官方模板的薄适配层）。
 
 使用方式：
 
-- 相机与坐标数学：从 `@main-ui/core/rendering` 导入 `Camera2D` / `Vec2`（该内核已吸收原 `viewport-2d-kit` 的相机数学与 PixiViewport）。
-- Matheshop 只保存与业务有关的 camera/viewBox 状态，并把鼠标事件转换为 world 坐标后交给 core。
+- 画布舞台、相机、指针/滚轮交互、fit 与坐标桥**全部由官方 `@main-ui/view-canvas` 提供**（`ViewportCanvas` + `ViewportCanvasShell` + `buildHostBridge`）；相机数学内核为 `@main-ui/core/rendering`（已吸收原 `viewport-2d-kit`）。
+- `MatheshopBoardStage` 只补两项 matheshop 专有内容：**cell 间三次贝塞尔连线层** 与 **`#world` 世界内容插槽**（回传 `camera` / `bridge`）。
+- 平移交互：官方模板的**左键拖拽**平移（与旧本地壳的「空格+拖拽 / 中键拖拽」不同）；滚轮以光标为锚点缩放。
 
-后续新增任何画布行为时，不要重新实现独立相机或旧坐标适配器；`viewport-2d-kit` 已从依赖中移除，不得再引入。
+后续新增任何画布行为时，不要重新实现独立相机或旧坐标适配器；`viewport-2d-kit` 与本地壳 `MatheshopCanvasSurface.vue` 均已退役，不得再引入。
 
 ## 5. TypeScript core 约束
 

@@ -1,5 +1,5 @@
 <template>
-  <MatheshopCanvasSurface :cells="surfaceCells" :edges="surfaceEdges" :view-box="viewBox">
+  <MatheshopBoardStage :cells="surfaceCells" :edges="surfaceEdges" :view-box="viewBox">
     <template #left>
       <div class="matheshop-side-content">
         <h2>工具</h2>
@@ -114,7 +114,7 @@
         />
       </div>
     </template>
-  </MatheshopCanvasSurface>
+  </MatheshopBoardStage>
 </template>
 
 <script setup lang="ts">
@@ -124,7 +124,7 @@ import { useWorkbench } from 'main-ui/vue'
 import { InspectorView, type InspectorSchema, type InspectorChangePayload } from '@main-ui/view-inspector'
 import { ConsoleView, type ConsoleEntry } from '@main-ui/view-console'
 import type { Camera2D } from '@main-ui/core/rendering'
-import MatheshopCanvasSurface, { type CanvasBridge } from '../components/canvas/MatheshopCanvasSurface.vue'
+import MatheshopBoardStage, { type CanvasBridge } from '../components/canvas/MatheshopBoardStage.vue'
 import MatheshopRelationLinkage from '../components/canvas/MatheshopRelationLinkage.vue'
 import { SymbolPanel } from '../components/canvas/MatheshopSymbolPanel'
 import { FormulaView, type FormulaAnchorIntent } from '@main-ui/view-formula'
@@ -139,7 +139,7 @@ import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from 
 import { MATHESHOP_ENGINE_CHOICES } from '../core/workbenchConstants'
 
 const props = defineProps<{ context: EditorRenderContext }>()
-const { document } = useWorkbench()
+const { document: workbenchDocument } = useWorkbench()
 
 /** T4 联动样板开关（mock 数据先行；待 ME P3 就绪后切真实数据源）。 */
 const showLinkageDemo = ref(false)
@@ -482,7 +482,7 @@ const onGlobalKeydown = (event: KeyboardEvent) => {
 
 /** 判断当前激活的 editor 是否为本实例，避免多个白板标签页同时响应全局命令。 */
 const isActiveEditor = () => {
-  const workspace = document.value.workspaceStates[document.value.activeWorkspaceId]
+  const workspace = workbenchDocument.value.workspaceStates[workbenchDocument.value.activeWorkspaceId]
   if (!workspace) return false
   const group = workspace.layout.groups[workspace.layout.activeGroupId ?? '']
   const activeTabId = group?.activeTabId

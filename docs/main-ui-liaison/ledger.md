@@ -12,6 +12,8 @@
 
 ## 工作日志
 
+- 2026-10-15 **画布壳替换（R4）**：本地壳 `MatheshopCanvasSurface.vue` 退役，改用官方 `@main-ui/view-canvas` 薄适配层 `MatheshopBoardStage.vue`（相机/交互/fit/坐标桥由官方模板提供，本地只留连线层 + 世界内容插槽）。2026-10-07 反馈信 §5 验收承诺的后半（官方模板就绪后替换本地壳）达成。附带修复：`MatheshopCanvasEditor.vue` 中 `const { document } = useWorkbench()` 遮蔽全局 `document` 导致 `focusActiveEditor` 抛 TypeError。
+
 ### 2026-10-07
 - 环境变化：`../flow-graph-kit` 与 `../viewport-2d-kit` 仓库已从磁盘删除；viewport-2d-kit 相机/交互数学被 `@main-ui/core/rendering` 吸收，`@main-ui/view-2d` 从 main-ui 包中移除，`pnpm install` 因此硬错误
 - 被迫提前执行本地壳化（原计划等 main-ui 官方模板）：新增 `src/components/canvas/MatheshopCanvasSurface.vue`（基于 @main-ui/core/rendering 的 DOM 画布壳 + SVG 连线层），删除 flow-graph-kit-vue / viewport-2d-kit / @main-ui/view-2d 依赖、flowGraphKitAdapter.ts 及 vite/tsconfig 死路径
