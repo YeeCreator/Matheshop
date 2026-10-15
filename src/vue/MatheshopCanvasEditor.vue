@@ -82,28 +82,53 @@
           :clear-enabled="false"
           :row-height="20"
         />
+
+        <h2>联动样板（T4）</h2>
+        <label class="matheshop-linkage-toggle">
+          <input type="checkbox" :checked="showLinkageDemo" @change="toggleLinkageDemo" />
+          <span>显示矩阵↔网络联动（mock 数据）</span>
+        </label>
+        <MatheshopRelationLinkage v-if="showLinkageDemo" :relations="MOCK_RELATIONS" />
       </div>
     </template>
   </MatheshopCanvasSurface>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { EditorRenderContext } from 'main-ui/core'
 import { useWorkbench } from 'main-ui/vue'
 import { InspectorView, type InspectorSchema, type InspectorChangePayload } from '@main-ui/view-inspector'
 import { ConsoleView, type ConsoleEntry } from '@main-ui/view-console'
 import type { Camera2D } from '@main-ui/core/rendering'
 import MatheshopCanvasSurface, { type CanvasBridge } from '../components/canvas/MatheshopCanvasSurface.vue'
+import MatheshopRelationLinkage from '../components/canvas/MatheshopRelationLinkage.vue'
 import { renderBlocksToHtml, renderConceptIcon } from '../core/blocks'
 import type { MatheshopBoardCore, MatheshopBoardSnapshot } from '../core/boardCore'
 import type { CellKind, ConceptShape, MatheshopCell, MatheshopEdge, Vec2 } from '../core/matheshopTypes'
+import type { RelationDatum } from '../core/relationData'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
-import { MATHESHOP_ENGINE_CHOICES } from '../core/workbench'
+import { MATHESHOP_ENGINE_CHOICES } from '../core/workbenchConstants'
 
 const props = defineProps<{ context: EditorRenderContext }>()
 const { document } = useWorkbench()
+
+/** T4 联动样板开关（mock 数据先行；待 ME P3 就绪后切真实数据源）。 */
+const showLinkageDemo = ref(false)
+const toggleLinkageDemo = (event: Event) => {
+  showLinkageDemo.value = (event.target as HTMLInputElement).checked
+}
+
+/** 契约3 mock 关系数据：4 个体、6 条有向关系（示范双向联动）。 */
+const MOCK_RELATIONS: RelationDatum[] = [
+  { i: 0, j: 1, weight: 2, label: '强影响' },
+  { i: 0, j: 2, weight: 1 },
+  { i: 1, j: 2, weight: 3 },
+  { i: 2, j: 0, weight: 1.5 },
+  { i: 2, j: 3, weight: 2 },
+  { i: 3, j: 1, weight: 1, label: '弱影响' },
+]
 
 const resolveWhiteboardFileId = (context: EditorRenderContext) => {
   const fileId = context.editor.payload?.whiteboardFileId
@@ -139,6 +164,12 @@ const historyEntries = computed<ConsoleEntry[]>(() =>
   })),
 )
 
+/** 契约1 · 可选知识单元类型（Inspector 下拉项）。 */
+const CONCEPT_KIND_OPTIONS: CellKind[] = [
+  'Definition', 'Axiom', 'Lemma', 'Theorem', 'Corollary', 'Proof',
+  'Example', 'CounterExample', 'Exercise', 'ConceptSketch', 'VisualModel',
+]
+
 /** view-inspector schema：单元框属性检视字段（FR-452）。 */
 const inspectorSchema: InspectorSchema = [
   { kind: 'number', key: 'seq', label: '序号', min: 1, step: 1 },
@@ -158,12 +189,6 @@ const inspectorSchema: InspectorSchema = [
   { kind: 'number', key: 'sizeH', label: '高度', min: 80, step: 1 },
   { kind: 'string', key: 'color', label: '颜色' },
   { kind: 'select', key: 'engine', label: '引擎', options: MATHESHOP_ENGINE_CHOICES.map((c) => ({ value: c.value, label: c.label })) },
-]
-
-/** 契约1 · 可选知识单元类型（Inspector 下拉项）。 */
-const CONCEPT_KIND_OPTIONS: CellKind[] = [
-  'Definition', 'Axiom', 'Lemma', 'Theorem', 'Corollary', 'Proof',
-  'Example', 'CounterExample', 'Exercise', 'ConceptSketch', 'VisualModel',
 ]
 
 /** 从选中单元框派生 Inspector 受控值表。 */
