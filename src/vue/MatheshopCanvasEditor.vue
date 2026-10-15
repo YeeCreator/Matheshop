@@ -115,6 +115,18 @@
 
         <h2>缩略导航（T6）</h2>
         <MatheshopMinimap :cells="surfaceCells" :viewport="minimapViewport" />
+
+        <h2>GeoGebra 子面板（T10）</h2>
+        <label class="matheshop-linkage-toggle">
+          <input type="checkbox" :checked="showGeoGebra" @change="toggleGeoGebra" />
+          <span>显示 GeoGebra（中等密度档交互子面板）</span>
+        </label>
+        <MatheshopGeoGebraPanel
+          v-if="showGeoGebra"
+          :commands="GEOGEBRA_COMMANDS"
+          :symbols="geogebraSymbols"
+          @update:param="onGeoGebraParam"
+        />
       </div>
     </template>
   </MatheshopBoardStage>
@@ -140,6 +152,7 @@ import { deriveAnchors, matheshopSymbols } from '../core/symbolTable'
 import { packSubgraph, resolveAction } from '../core/interactions'
 import { asMiniCanvas } from '../core/miniCanvas'
 import MatheshopMinimap from '../components/canvas/MatheshopMinimap.vue'
+import MatheshopGeoGebraPanel from '../components/canvas/MatheshopGeoGebraPanel.vue'
 import { matheshopWhiteboardFiles } from '../core/whiteboardFiles'
 import { MATHESHOP_BOARD_COMMAND_EVENT, type MatheshopBoardCommandDetail } from '../core/boardCommands'
 import { MATHESHOP_ENGINE_CHOICES } from '../core/workbenchConstants'
@@ -212,6 +225,23 @@ matheshopSymbols.replaceAll([
 ])
 
 const formulaAnchors = computed(() => deriveAnchors(FORMULA_DEMO, matheshopSymbols))
+/** T10 GeoGebra 子面板：开关、预置命令与符号绑定。 */
+const showGeoGebra = ref(false)
+const toggleGeoGebra = (event: Event) => {
+  showGeoGebra.value = (event.target as HTMLInputElement).checked
+}
+
+/** 预置演示命令（点 + 圆），演示「中等密度档可交互模型」。 */
+const GEOGEBRA_COMMANDS = ['A=(1,2)', 'B=(4,3)', 'Circle(A,B)', 'Segment(A,B)']
+
+/** 与全局符号表对齐的绑定符号（只读展示）。 */
+const geogebraSymbols = computed(() => matheshopSymbols.getSnapshot().entries.map((entry) => entry.name))
+
+/** GeoGebra 侧参数回写：此处仅提示（回写策略由宿主决定）。 */
+const onGeoGebraParam = (payload: { name: string; value: number }) => {
+  activeBoard.value.setStatusMessage(`GeoGebra 参数更新：${payload.name} = ${payload.value}`)
+}
+
 const onAnchorHover = (intent: FormulaAnchorIntent) => {
   highlightSymbolId.value = intent.symbolId
 }
